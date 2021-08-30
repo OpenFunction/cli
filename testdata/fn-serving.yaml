@@ -1,0 +1,17 @@
+apiVersion: core.openfunction.io/v1alpha1
+kind: Function
+metadata:
+  name: sample-serving
+spec:
+  version: "v1.0.0"
+  image: "openfunctiondev/sample-go-func:latest"
+  imageCredentials:
+    name: push-secret
+  port: 8080
+  serving:
+    runtime: Knative
+    template:
+      containers:
+        - name: function
+          imagePullPolicy: Always
+
