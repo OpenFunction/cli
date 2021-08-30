@@ -1,0 +1,17 @@
+apiVersion: core.openfunction.io/v1alpha1
+kind: Function
+metadata:
+  name: sample-build
+spec:
+  version: "v1.0.0"
+  image: "dockerhub.qingcloud.com/lowcode/fn:v0.0.1"
+  imageCredentials:
+    name: qxpreg
+  port: 12345
+  serving:
+    runtime: Knative
+    template:
+      containers:
+        - name: function
+          imagePullPolicy: Always
+
