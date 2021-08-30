@@ -53,7 +53,7 @@ Init a project from the specified framework
 	cmd.Flags().StringVarP(&i.ProjectName, "project-name", "", i.ProjectName, "name of this project")
 	cmd.Flags().StringVarP(&i.Repo, "repo", "", i.Repo, "name to use for go module")
 	cmd.Flags().StringVarP(&i.OutPutPath, "output", "o", ".", "project output path")
-	cmd.Flags().StringVarP(&i.Language, "lang", "l", "go", "language or framework to use (default: go)")
+	cmd.Flags().StringVarP(&i.Language, "lang", "l", "go", "language or framework to use")
 	return cmd
 }
 
