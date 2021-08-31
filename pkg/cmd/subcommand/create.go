@@ -37,10 +37,10 @@ type Create struct {
 const (
 	createExample = `
 # Create a function using the data in function.yaml
-of create -f function.yaml
+fn create -f function.yaml
 
 # Create a function based on the YAML passed into stdin
-cat function.yaml | of create -f -
+cat function.yaml | fn create -f -
 `
 )
 

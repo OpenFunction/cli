@@ -26,16 +26,16 @@ type Get struct {
 const (
 	getExample = `
 # List all function in output format
-of get
+fn get
 
 # Get function in JSON output format
-of get sample -o json
+fn get sample -o json
 
 # Get function in YAML output format
-of get sample -o yaml
+fn get sample -o yaml
 
-# Return only the state of build
-of get sample --template={{.status.build.state}}
+# Return only the state fn build
+fn get sample --template={{.status.build.state}}
 `
 	getLong = `
 Prints a table of the most important information.

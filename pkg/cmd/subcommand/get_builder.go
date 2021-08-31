@@ -25,17 +25,17 @@ type getBuilder struct {
 const (
 	getbulderExample = `
 # List all builder in output format
-of get builder
+fn get builder
 
 # Get builder in JSON output format
-of get builder sample-builder-m5sbv -o json
+fn get builder sample-builder-m5sbv -o json
 
 # Get builder in YAML output format
-of get builder sample-builder-m5sbv -o yaml
+fn get builder sample-builder-m5sbv -o yaml
 `
 
 	getBuildLong = `
-Prints a table of the most important information.
+Prints a table fn the most important information.
 `
 )
 

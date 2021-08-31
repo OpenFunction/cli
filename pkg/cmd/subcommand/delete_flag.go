@@ -26,7 +26,7 @@ func (d *deleteFlag) addFlag(cmd *cobra.Command) {
 	cmd.Flags().BoolVarP(&d.All, "all", "", d.All, "Delete all resources, including uninitialized ones, in the namespace of the specified resource types.")
 	cmd.Flags().StringVarP(&d.LabelSelector, "selector", "l", d.LabelSelector, "Selector (label query) to filter on, not including uninitialized ones")
 	cmd.Flags().StringVarP(&d.FieldSelector, "field-selector", "", d.FieldSelector, "Selector (field query) to filter on, supports '=', '==', and '!='.(e.g. --field-selector key1=value1,key2=value2). The server only supports a limited number of field queries per type")
-	cmd.Flags().Int64VarP(d.GracePeriodSeconds, "grace-period-seconds", "", *d.GracePeriodSeconds, "The duration in seconds before the object should be deletedl")
+	cmd.Flags().Int64VarP(d.GracePeriodSeconds, "grace-period-seconds", "", *d.GracePeriodSeconds, "The duration in seconds before the object should be deleted")
 	cmd.Flags().BoolVarP(&d.DryRun, "dry-run", "", d.DryRun, "Only print the object that would be sent, without sending it")
 }
 

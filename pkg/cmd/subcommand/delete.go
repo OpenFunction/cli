@@ -28,13 +28,13 @@ type Delete struct {
 const (
 	deleteExample = `
 # Delete a function using the name specified in demo.yaml
-of delete -f demo.yaml
+fn delete -f demo.yaml
 
 # Delete a function based on name in the YAML passed into stdin
-cat demo.yaml | of delete -f -
+cat demo.yaml | fn delete -f -
 
 # Delete all functions
-of delete --all
+fn delete --all
 `
 )
 
@@ -52,7 +52,7 @@ func NewCmdDelete(restClient util.Getter, ioStreams genericclioptions.IOStreams)
 	cmd := &cobra.Command{
 		Use:                   "delete -f FILENAME",
 		DisableFlagsInUseLine: true,
-		Short:                 "Apply a resource from a file",
+		Short:                 "Delete a function",
 		Long: `
 Delete funtion by file names, stdin and names, or by resources
 `,

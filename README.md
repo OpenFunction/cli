@@ -6,7 +6,7 @@ The `cli` repo is used to track issues for the `OpenFunction`.  this tool allows
 
 ## Main commands
 The main commands supported by the CLI are:
-- init: provides management for openfunction’s frameworkor.
+- init: provides management for openfunction’s framework.
 - create: create a function from a file or stdin.
 - apply: apply a function from a file or stdin.
 - get: prints a table of the most important information about the specified function.
