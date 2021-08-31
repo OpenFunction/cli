@@ -52,7 +52,7 @@ func NewCmdDelete(restClient util.Getter, ioStreams genericclioptions.IOStreams)
 	cmd := &cobra.Command{
 		Use:                   "delete -f FILENAME",
 		DisableFlagsInUseLine: true,
-		Short:                 "Apply a resource from a file",
+		Short:                 "Delete a function",
 		Long: `
 Delete funtion by file names, stdin and names, or by resources
 `,
