@@ -25,17 +25,17 @@ type getServing struct {
 const (
 	getServingExample = `
 # List all serving in output format
-of get builder
+fn get builder
 
 # Get serving in JSON output format
-of get serving sample-serving-c2dsf -o json
+fn get serving sample-serving-c2dsf -o json
 
 # Get serving in YAML output format
-of get serving sample-serving-c2dsf -o yaml
+fn get serving sample-serving-c2dsf -o yaml
 `
 
 	getServingLong = `
-Prints a table of the most important information.
+Prints a table fn the most important information.
 `
 )
 

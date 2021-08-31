@@ -12,7 +12,6 @@ import (
 	"k8s.io/cli-runtime/pkg/genericclioptions"
 	"k8s.io/client-go/rest"
 	cflg "k8s.io/component-base/cli/flag"
-	// cmdutil "k8s.io/kubectl/pkg/cmd/util"
 )
 
 // NewDefaultCommand creates the default command with default arguments
@@ -28,10 +27,10 @@ func NewDefaultCommandWithArgs(args []string, in io.Reader, out, errout io.Write
 // NewCommand creates the command
 func NewCommand(in io.Reader, out, errout io.Writer) *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "of",
-		Short: "of controls the openfunction manager",
+		Use:   "fn",
+		Short: "fn controller the openfunction manager",
 		Long: `
-of controls the openfunction manager.
+fn controller the openfunction manager.
 
 Find more information at:
     https://https://github.com/OpenFunction/OpenFunction/blob/main/README.md
