@@ -6,7 +6,7 @@ This command will help you to install OpenFunction and its dependencies.
 
 ```shell
 --all              For installing all dependencies.
---async            For installing OpenFunction Async Runtime(Dapr & Keda).
+--async            For installing OpenFunction Async Runtime (Dapr & Keda).
 --cert-manager     For installing Cert Manager.
 --dapr             For installing Dapr.
 --dry-run          Used to prompt for the components and their versions to be installed by the current command.
@@ -15,7 +15,7 @@ This command will help you to install OpenFunction and its dependencies.
 --knative          For installing Knative Serving (with Kourier as default gateway).
 --region-cn        For users in China to speed up the download process of dependent components.
 --shipwright       For installing ShipWright.
---sync             For installing OpenFunction Sync Runtime(Knative).
+--sync             For installing OpenFunction Sync Runtime (To be supported).
 --upgrade          Upgrade components to target version while installing.
 --verbose          Show verbose information.
 --version string   Used to specify the version of OpenFunction to be installed. The permitted versions are: v0.3.1, v0.4.0, latest. (default "v0.4.0")
@@ -32,12 +32,12 @@ fn install --async
 or
 
 ```shell
-fn install --sync
+fn install --knative
 ```
 
 #### Support for users in China to speed up the installation process
 
-> When you uninstall, you must also add `--region-cn`.
+> This requires that you should also add the `--region-cn` parameter when executing the uninstall operation
 
 ```shell
 fn install --region-cn --all

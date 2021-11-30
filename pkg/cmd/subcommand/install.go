@@ -80,7 +80,7 @@ func NewCmdInstall(restClient util.Getter, ioStreams genericclioptions.IOStreams
 	i := NewInstall(ioStreams)
 
 	cmd := &cobra.Command{
-		Use:                   "install",
+		Use:                   "install <args>...",
 		DisableFlagsInUseLine: true,
 		Short:                 "Install OpenFunction and its dependencies.",
 		Long: `
@@ -90,11 +90,11 @@ You can use fn install --all to install all components.
 
 The dependencies to be installed for OpenFunction v0.3.1 are: Dapr, KEDA, Knative Serving, Shipwright, Tekton Pipelines.
 
-The permitted parameters are: --sync, --async, --knative, --shipwright, --version, --verbose, --dry-run
+The permitted parameters are: --async, --knative, --shipwright, --version, --verbose, --dry-run
 
 The dependencies to be installed for OpenFunction v0.4.0 are: Dapr, KEDA, Knative Serving, Shipwright, Tekton Pipelines, Cert Manager, Ingress Nginx.
 
-The permitted parameters are: --sync, --async, --knative, --shipwright, --cert-manager, --ingress, --version, --verbose, --dry-run
+The permitted parameters are: --async, --knative, --shipwright, --cert-manager, --ingress, --version, --verbose, --dry-run
 `,
 		Example: "fn install --all",
 		PreRunE: func(cmd *cobra.Command, args []string) (err error) {
@@ -117,13 +117,21 @@ The permitted parameters are: --sync, --async, --knative, --shipwright, --cert-m
 	cmd.Flags().BoolVar(&i.WithShipWright, "shipwright", false, "For installing ShipWright.")
 	cmd.Flags().BoolVar(&i.WithCertManager, "cert-manager", false, "For installing Cert Manager.")
 	cmd.Flags().BoolVar(&i.WithIngress, "ingress", false, "For installing Ingress Nginx.")
-	cmd.Flags().BoolVar(&i.WithAsyncRuntime, "async", false, "For installing OpenFunction Async Runtime(Dapr & Keda).")
-	cmd.Flags().BoolVar(&i.WithSyncRuntime, "sync", false, "For installing OpenFunction Sync Runtime(Knative).")
+	cmd.Flags().BoolVar(&i.WithAsyncRuntime, "async", false, "For installing OpenFunction Async Runtime (Dapr & Keda).")
+	cmd.Flags().BoolVar(&i.WithSyncRuntime, "sync", false, "For installing OpenFunction Sync Runtime (To be supported).")
 	cmd.Flags().BoolVar(&i.WithAll, "all", false, "For installing all dependencies.")
 	cmd.Flags().BoolVar(&i.RegionCN, "region-cn", false, "For users in China to speed up the download process of dependent components.")
 	cmd.Flags().BoolVar(&i.DryRun, "dry-run", false, "Used to prompt for the components and their versions to be installed by the current command.")
 	cmd.Flags().BoolVar(&i.WithUpgrade, "upgrade", false, "Upgrade components to target version while installing.")
 	cmd.Flags().StringVar(&i.OpenFunctionVersion, "version", "v0.4.0", "Used to specify the version of OpenFunction to be installed. The permitted versions are: v0.3.1, v0.4.0, latest.")
+	// In order to avoid too many options causing misunderstandings among users,
+	// we have hidden the following parameters,
+	// but you can still find their usage instructions in the documentation.
+	cmd.Flags().MarkHidden("ingress")
+	cmd.Flags().MarkHidden("cert-manager")
+	cmd.Flags().MarkHidden("shipwright")
+	cmd.Flags().MarkHidden("keda")
+	cmd.Flags().MarkHidden("dapr")
 	return cmd
 }
 
@@ -314,9 +322,8 @@ func (i *Install) checkConditionsAndGetInventory() map[string]string {
 	}
 
 	// Update the corresponding conditions when WithSyncRuntime is true
-	if i.WithSyncRuntime {
-		i.WithKnative = true
-	}
+	//if i.WithSyncRuntime {
+	//}
 
 	if i.WithDapr {
 		inventory["Dapr"] = getVersionFromEnv(OpenFunctionDaprVersion, DefaultDaprVersion)

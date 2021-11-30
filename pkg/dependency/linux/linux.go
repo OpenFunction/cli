@@ -54,20 +54,6 @@ func (e *Executor) DownloadDaprClient(inRegionCN bool) error {
 	return nil
 }
 
-func (e *Executor) GetExistDaprVerion() string {
-	cmd := "kubectl get namespace dapr-system"
-	if _, _, err := e.Exec(cmd); err != nil {
-		return "None"
-	} else {
-		cmd = "kubectl get po -n dapr-system -L app.kubernetes.io/version|grep operator|awk '{ print $6 }'"
-		if out, _, err := e.Exec(cmd); err != nil {
-			return "None"
-		} else {
-			return out
-		}
-	}
-}
-
 func (e *Executor) KubectlApplyAndCreateAndDelete(
 	ctx context.Context,
 	operator string,

@@ -10,6 +10,5 @@ import (
 type OperatorExecutor interface {
 	Exec(cmd string) (string, string, error)
 	DownloadDaprClient(inRegionCN bool) error
-	GetExistDaprVerion() string
 	KubectlApplyAndCreateAndDelete(ctx context.Context, operator string, yamlFile string) error
 }
