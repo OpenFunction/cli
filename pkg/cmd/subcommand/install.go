@@ -202,8 +202,9 @@ func (i *Install) RunInstall(cl *k8s.Clientset, cmd *cobra.Command) error {
 			grp1.Go(func() error {
 				return i.installDapr(g1ctx, operator)
 			})
+		} else {
+			fmt.Fprintln(w, ti.SkipTask("Dapr"))
 		}
-		fmt.Fprintln(w, ti.SkipTask("Dapr"))
 	}
 
 	if i.WithKeda {
@@ -213,8 +214,9 @@ func (i *Install) RunInstall(cl *k8s.Clientset, cmd *cobra.Command) error {
 			grp1.Go(func() error {
 				return i.installKeda(g1ctx, cl, operator)
 			})
+		} else {
+			fmt.Fprintln(w, ti.SkipTask("Keda"))
 		}
-		fmt.Fprintln(w, ti.SkipTask("Keda"))
 	}
 
 	if i.WithKnative {
@@ -224,8 +226,9 @@ func (i *Install) RunInstall(cl *k8s.Clientset, cmd *cobra.Command) error {
 			grp1.Go(func() error {
 				return i.installKnativeServing(g1ctx, cl, operator)
 			})
+		} else {
+			fmt.Fprintln(w, ti.SkipTask("Knative Serving & Kourier"))
 		}
-		fmt.Fprintln(w, ti.SkipTask("Knative Serving & Kourier"))
 	}
 
 	if i.WithShipWright {
@@ -243,8 +246,9 @@ func (i *Install) RunInstall(cl *k8s.Clientset, cmd *cobra.Command) error {
 			grp1.Go(func() error {
 				return i.installCertManager(g1ctx, cl, operator)
 			})
+		} else {
+			fmt.Fprintln(w, ti.SkipTask("Cert Manager"))
 		}
-		fmt.Fprintln(w, ti.SkipTask("Cert Manager"))
 	}
 
 	if i.WithIngress && i.OpenFunctionVersion != "v0.3.1" {
@@ -254,8 +258,9 @@ func (i *Install) RunInstall(cl *k8s.Clientset, cmd *cobra.Command) error {
 			grp1.Go(func() error {
 				return i.installIngress(g1ctx, cl, operator)
 			})
+		} else {
+			fmt.Fprintln(w, ti.SkipTask("Ingress Nginx"))
 		}
-		fmt.Fprintln(w, ti.SkipTask("Ingress Nginx"))
 	}
 
 	if err := grp1.Wait(); err != nil {
