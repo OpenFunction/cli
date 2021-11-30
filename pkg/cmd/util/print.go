@@ -1,8 +1,12 @@
 package util
 
 import (
+	"fmt"
+	"os"
 	"time"
 
+	"github.com/fatih/color"
+	"github.com/jedib0t/go-pretty/v6/table"
 	"github.com/spf13/cobra"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -11,7 +15,19 @@ import (
 	"k8s.io/cli-runtime/pkg/printers"
 )
 
-var forceDetail = "yaml"
+var (
+	Yellow       = color.New(color.FgHiYellow, color.Bold).SprintFunc()
+	YellowItalic = color.New(color.FgHiYellow, color.Bold, color.Italic).SprintFunc()
+	Green        = color.New(color.FgHiGreen, color.Bold).SprintFunc()
+	Blue         = color.New(color.FgHiBlue, color.Bold).SprintFunc()
+	Cyan         = color.New(color.FgCyan, color.Bold, color.Underline).SprintFunc()
+	Red          = color.New(color.FgHiRed, color.Bold).SprintFunc()
+	White        = color.New(color.FgWhite).SprintFunc()
+	WhiteBold    = color.New(color.FgWhite, color.Bold).SprintFunc()
+	forceDetail  = "yaml"
+)
+
+type MessageLevel string
 
 type Printer struct {
 	PrintFlags  *genericclioptions.PrintFlags
@@ -127,4 +143,59 @@ func TranslateTimestampSince(timestamp metav1.Time) string {
 	}
 
 	return duration.HumanDuration(time.Since(timestamp.Time))
+}
+
+// TaskInformer is a printer of task information.
+type TaskInformer struct {
+	title string
+}
+
+func NewTaskInformer(title string) *TaskInformer {
+	return &TaskInformer{
+		title: title,
+	}
+}
+
+func (ti *TaskInformer) BeforeTask(msg string) string {
+	return fmt.Sprintf("%s", YellowItalic(msg))
+}
+
+func (ti *TaskInformer) SkipTask(msg string) string {
+	str := fmt.Sprintf(" -> Skip the %s installation", msg)
+	return fmt.Sprintf("🚗 %s", Green(str))
+}
+
+func (ti *TaskInformer) TaskInfo(msg string) string {
+	str := fmt.Sprintf(" -> %s <- %s", ti.title, msg)
+	return fmt.Sprintf("🔄 %s", White(str))
+}
+
+func (ti *TaskInformer) TaskFail(msg string) string {
+	return fmt.Sprintf("❌ %s", Red(msg))
+}
+
+func (ti *TaskInformer) TaskFailWithTitle(msg string) string {
+	return fmt.Sprintf(" -> %s <- %s", ti.title, msg)
+}
+
+func (ti *TaskInformer) TaskSuccess() string {
+	str := fmt.Sprintf(" -> %s <- Done!", ti.title)
+	return fmt.Sprintf("✅ %s", White(str))
+}
+
+func (ti *TaskInformer) AllDone(t time.Duration) string {
+	return fmt.Sprintf("🚀 %s", WhiteBold(fmt.Sprintf("Completed in %s.", t)))
+}
+
+func (ti *TaskInformer) PrintTable(inventory map[string]string) {
+	t := table.NewWriter()
+	t.SetOutputMirror(os.Stdout)
+	t.AppendHeader(table.Row{"Component", "Version"})
+	for comp, version := range inventory {
+		t.AppendRows([]table.Row{
+			{comp, version},
+		})
+	}
+	t.AppendSeparator()
+	t.Render()
 }

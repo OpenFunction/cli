@@ -34,3 +34,21 @@ func UsageErrorf(cmd *cobra.Command, format string, args ...interface{}) error {
 	msg := fmt.Sprintf(format, args...)
 	return fmt.Errorf("%s\nSee '%s -h' for help and examples", msg, cmd.CommandPath())
 }
+
+func IgnoreNotFoundErr(err error) error {
+	if err != nil {
+		if strings.Contains(err.Error(), "not found") || strings.Contains(err.Error(), "NotFound") {
+			return nil
+		}
+	}
+	return err
+}
+
+func IsInSlice(s string, target []string) bool {
+	for _, t := range target {
+		if t == s {
+			return true
+		}
+	}
+	return false
+}
