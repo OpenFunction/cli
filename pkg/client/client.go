@@ -2,20 +2,30 @@ package client
 
 import (
 	"context"
+	"flag"
+	"fmt"
 	"net/http"
+	"os"
+	"path/filepath"
+	"strings"
+	"sync"
 
 	"github.com/OpenFunction/cli/pkg/cmd/util"
 	openfunction "github.com/openfunction/apis/core/v1alpha1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	k8s "k8s.io/client-go/kubernetes"
 	scheme "k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/rest/fake"
+	"k8s.io/client-go/tools/clientcmd"
+	"k8s.io/client-go/util/homedir"
 )
 
 const (
-	fnName      = "functions"
-	builderName = "builders"
-	servingName = "servings"
+	fnName              = "functions"
+	builderName         = "builders"
+	servingName         = "servings"
+	kubeConfigDelimiter = ":"
 )
 
 func init() {
@@ -39,7 +49,7 @@ type FnClient interface {
 	ListServing(ctx context.Context, namespaceIfScoped bool, opts metav1.ListOptions) (result *openfunction.ServingList, err error)
 }
 
-// newFnClient new a openFunction rest client from RESTClientGetter
+// NewFnClient new a openFunction rest client from RESTClientGetter
 func NewFnClient(r util.Getter) (FnClient, error) {
 	restConfig, err := r.ToRESTConfig()
 	if err != nil {
@@ -65,6 +75,19 @@ func NewFnClient(r util.Getter) (FnClient, error) {
 	}
 
 	return fc, nil
+}
+
+// NewKubeConfigClient returns the kubeconfig and the client created from the kubeconfig.
+func NewKubeConfigClient() (*rest.Config, *k8s.Clientset, error) {
+	config, err := getConfig()
+	if err != nil {
+		return nil, nil, err
+	}
+	client, err := k8s.NewForConfig(config)
+	if err != nil {
+		return config, nil, err
+	}
+	return config, client, nil
 }
 
 func NewFakeFnClient(namespace string, roundTripper func(r *http.Request) (*http.Response, error)) (FnClient, error) {
@@ -97,6 +120,39 @@ func SetConfigDefaults(config *rest.Config) error {
 	}
 
 	return nil
+}
+
+func getConfig() (*rest.Config, error) {
+	var (
+		doOnce     sync.Once
+		kubeconfig *string
+	)
+
+	if home := homedir.HomeDir(); home != "" {
+		kubeconfig = flag.String("kubeconfig", filepath.Join(home, ".kube", "config"), "(optional) absolute path to the kubeconfig file")
+	} else {
+		kubeconfig = flag.String("kubeconfig", "", "absolute path to the kubeconfig file")
+	}
+
+	doOnce.Do(func() {
+		flag.Parse()
+	})
+	kubeConfigEnv := os.Getenv("KUBECONFIG")
+	delimiterBelongsToPath := strings.Count(*kubeconfig, kubeConfigDelimiter) == 1 && strings.EqualFold(*kubeconfig, kubeConfigEnv)
+
+	if len(kubeConfigEnv) != 0 && !delimiterBelongsToPath {
+		kubeConfigs := strings.Split(kubeConfigEnv, kubeConfigDelimiter)
+		if len(kubeConfigs) > 1 {
+			return nil, fmt.Errorf("multiple kubeconfigs in KUBECONFIG environment variable - %s", kubeConfigEnv)
+		}
+		kubeconfig = &kubeConfigs[0]
+	}
+
+	config, err := clientcmd.BuildConfigFromFlags("", *kubeconfig)
+	if err != nil {
+		return nil, err
+	}
+	return config, nil
 }
 
 type fnClient struct {

@@ -58,6 +58,8 @@ Find more information at:
 	cmd.AddCommand(subcommand.NewCmdApply(restClient, ioStreams))
 	cmd.AddCommand(subcommand.NewCmdDelete(restClient, ioStreams))
 	cmd.AddCommand(subcommand.NewCmdGet(restClient, ioStreams))
+	cmd.AddCommand(subcommand.NewCmdInstall(restClient, ioStreams))
+	cmd.AddCommand(subcommand.NewCmdUninstall(restClient, ioStreams))
 	return cmd
 }
 
