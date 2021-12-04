@@ -174,3 +174,38 @@ func (e *Executor) GetInventoryRecord(ctx context.Context) (*inventory.Record, e
 
 	return record, nil
 }
+
+func (e *Executor) DownloadKind(ctx context.Context) error {
+	DownloadCmd := "curl -Lo ./kind https://kind.sigs.k8s.io/dl/v0.11.1/kind-linux-amd64"
+	if _, _, err := e.Exec(DownloadCmd); err != nil {
+		return err
+	}
+	ChmodCmd := "chmod +x ./kind"
+	if _, _, err := e.Exec(ChmodCmd); err != nil {
+		return err
+	}
+	MvCmd := "mv ./kind /usr/local/bin/kind"
+	if _, _, err := e.Exec(MvCmd); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (e *Executor) GetNodeIP(ctx context.Context) (string, error) {
+	GetNodeIP := "docker exec openfunction-control-plane sh -c \"ip addr | grep eth0$ | grep -Eo 'inet ([0-9]*\\.){3}[0-9]*' | grep -Eo '([0-9]*\\.){3}[0-9]*' | tr -d '\\n'\""
+	NodeIP, _, err := e.Exec(GetNodeIP)
+	if err != nil {
+		return "", err
+	}
+	return NodeIP, nil
+}
+
+func (e *Executor) CurlOpenFunction(ctx context.Context, endPoint string) error {
+	CurlCMD := fmt.Sprintf("curl %s", endPoint)
+	res, _, err := e.Exec(CurlCMD)
+	if err != nil {
+		return err
+	}
+	fmt.Println(res)
+	return nil
+}

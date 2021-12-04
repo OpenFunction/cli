@@ -60,6 +60,7 @@ Find more information at:
 	cmd.AddCommand(subcommand.NewCmdGet(restClient, ioStreams))
 	cmd.AddCommand(subcommand.NewCmdInstall(restClient, ioStreams))
 	cmd.AddCommand(subcommand.NewCmdUninstall(restClient, ioStreams))
+	cmd.AddCommand(subcommand.NewCmdDemo(restClient, ioStreams))
 	return cmd
 }
 
