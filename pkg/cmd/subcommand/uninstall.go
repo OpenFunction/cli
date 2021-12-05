@@ -37,6 +37,7 @@ type Uninstall struct {
 	OpenFunctionVersion string
 	DryRun              bool
 	WaitForCleared      bool
+	Timeout             time.Duration
 }
 
 func init() {
@@ -101,6 +102,7 @@ The permitted parameters are: --async, --knative, --shipwright, --cert-manager, 
 	cmd.Flags().BoolVar(&i.DryRun, "dry-run", false, "Used to prompt for the components and their versions to be uninstalled by the current command.")
 	cmd.Flags().BoolVar(&i.WaitForCleared, "wait", false, "Awaiting the results of the uninstallation.")
 	cmd.Flags().StringVar(&i.OpenFunctionVersion, "version", "v0.4.0", "Used to specify the version of OpenFunction to be uninstalled.")
+	cmd.Flags().DurationVar(&i.Timeout, "timeout", 5*time.Minute, "Set timeout time. Default is 5 minutes.")
 	// In order to avoid too many options causing misunderstandings among users,
 	// we have hidden the following parameters,
 	// but you can still find their usage instructions in the documentation.
@@ -127,12 +129,12 @@ func (i *Uninstall) ValidateArgs(cmd *cobra.Command, args []string) error {
 }
 
 func (i *Uninstall) RunUninstall(cl *k8s.Clientset, cmd *cobra.Command) error {
-	operator := common.NewOperator(runtime.GOOS, i.OpenFunctionVersion, i.RegionCN, i.Verbose)
+	operator := common.NewOperator(runtime.GOOS, i.OpenFunctionVersion, i.Timeout, i.RegionCN, i.Verbose)
 	ti := util.NewTaskInformer("")
 	continueFunc := func() bool {
 		reader := bufio.NewReader(os.Stdin)
-		fmt.Fprintln(w, ti.BeforeTask("You can see the list of components to be installed and the list of components already exist in the cluster.\n"+
-			"You have used the `--upgrade` parameter, which means that the installation process will overwrite the components that already exist in the cluster.\n"+
+		fmt.Fprintln(w, ti.BeforeTask("You can see the list of components to be uninstalled "+
+			"and the list of components already exist in the cluster.\n"+
 			"Make sure you know what happens when you do this.\n"+
 			"Enter 'y' to continue and 'n' to abort:"))
 
@@ -151,16 +153,20 @@ func (i *Uninstall) RunUninstall(cl *k8s.Clientset, cmd *cobra.Command) error {
 		}
 	}
 
-	ctx, done := context.WithCancel(
+	ctx, done := context.WithTimeout(
 		context.Background(),
+		i.Timeout,
 	)
 	defer done()
 
 	inventoryPending := i.checkConditionsAndGetInventory()
+	inventoryExist := getExistComponentsInventory(ctx, cl, true)
 
 	fmt.Fprintln(w, ti.BeforeTask("Start uninstalling OpenFunction and its dependencies.\n"+
-		"Here are the components and corresponding versions to be uninstalled for this installation:"))
+		"Here are the components and corresponding versions to be uninstalled:"))
 	printInventory(inventoryPending)
+	fmt.Fprintln(w, ti.BeforeTask("The following components already exist:"))
+	printInventory(inventoryExist)
 
 	if i.DryRun {
 		return nil
@@ -170,7 +176,6 @@ func (i *Uninstall) RunUninstall(cl *k8s.Clientset, cmd *cobra.Command) error {
 	}
 
 	grp, gctx := errgroup.WithContext(ctx)
-	defer gctx.Done()
 
 	start := time.Now()
 
@@ -190,11 +195,17 @@ func (i *Uninstall) RunUninstall(cl *k8s.Clientset, cmd *cobra.Command) error {
 		grp.Go(func() error {
 			return i.uninstallKnativeServing(gctx, cl, operator)
 		})
+		grp.Go(func() error {
+			return i.uninstallKourier(gctx, cl, operator)
+		})
 	}
 
 	if i.WithShipWright {
 		grp.Go(func() error {
 			return i.uninstallShipwright(gctx, cl, operator)
+		})
+		grp.Go(func() error {
+			return i.uninstallTektonPipelines(gctx, cl, operator)
 		})
 	}
 
@@ -286,7 +297,7 @@ func (i *Uninstall) checkConditionsAndGetInventory() map[string]string {
 }
 
 func (i *Uninstall) uninstallDapr(ctx context.Context, cl *k8s.Clientset, operator *common.Operator) error {
-	ctx, done := context.WithTimeout(context.Background(), 10*time.Minute)
+	ctx, done := context.WithCancel(ctx)
 	defer done()
 
 	ti := util.NewTaskInformer("DAPR")
@@ -300,7 +311,7 @@ func (i *Uninstall) uninstallDapr(ctx context.Context, cl *k8s.Clientset, operat
 }
 
 func (i *Uninstall) uninstallKeda(ctx context.Context, cl *k8s.Clientset, operator *common.Operator) error {
-	ctx, done := context.WithTimeout(context.Background(), 10*time.Minute)
+	ctx, done := context.WithCancel(ctx)
 	defer done()
 
 	ti := util.NewTaskInformer("KEDA")
@@ -314,7 +325,7 @@ func (i *Uninstall) uninstallKeda(ctx context.Context, cl *k8s.Clientset, operat
 }
 
 func (i *Uninstall) uninstallKnativeServing(ctx context.Context, cl *k8s.Clientset, operator *common.Operator) error {
-	ctx, done := context.WithTimeout(context.Background(), 10*time.Minute)
+	ctx, done := context.WithCancel(ctx)
 	defer done()
 
 	ti := util.NewTaskInformer("KNATIVE")
@@ -323,6 +334,16 @@ func (i *Uninstall) uninstallKnativeServing(ctx context.Context, cl *k8s.Clients
 	if err := operator.UninstallKnativeServing(ctx, cl, i.WaitForCleared); util.IgnoreNotFoundErr(err) != nil {
 		return errors.Wrap(err, ti.TaskFailWithTitle("Failed to uninstall Knative Serving"))
 	}
+	fmt.Fprintln(w, ti.TaskSuccess())
+	return nil
+}
+
+func (i *Uninstall) uninstallKourier(ctx context.Context, cl *k8s.Clientset, operator *common.Operator) error {
+	ctx, done := context.WithCancel(ctx)
+	defer done()
+
+	ti := util.NewTaskInformer("KOURIER")
+
 	fmt.Fprintln(w, ti.TaskInfo("Uninstalling Kourier..."))
 	if err := operator.UninstallKourier(ctx, cl, i.WaitForCleared); util.IgnoreNotFoundErr(err) != nil {
 		return errors.Wrap(err, ti.TaskFailWithTitle("Failed to uninstall Kourier"))
@@ -332,13 +353,27 @@ func (i *Uninstall) uninstallKnativeServing(ctx context.Context, cl *k8s.Clients
 }
 
 func (i *Uninstall) uninstallShipwright(ctx context.Context, cl *k8s.Clientset, operator *common.Operator) error {
-	ctx, done := context.WithTimeout(ctx, 10*time.Minute)
+	ctx, done := context.WithCancel(ctx)
 	defer done()
 
 	ti := util.NewTaskInformer("SHIPWRIGHT")
 
-	fmt.Fprintln(w, ti.TaskInfo("Uninstalling Tekton Pipeline & Shipwright..."))
+	fmt.Fprintln(w, ti.TaskInfo("Uninstalling Shipwright..."))
 	if err := operator.UninstallShipwright(ctx, cl, i.WaitForCleared); util.IgnoreNotFoundErr(err) != nil {
+		return errors.Wrap(err, ti.TaskFailWithTitle("Failed to uninstall Shipwright"))
+	}
+	fmt.Fprintln(w, ti.TaskSuccess())
+	return nil
+}
+
+func (i *Uninstall) uninstallTektonPipelines(ctx context.Context, cl *k8s.Clientset, operator *common.Operator) error {
+	ctx, done := context.WithCancel(ctx)
+	defer done()
+
+	ti := util.NewTaskInformer("TEKTON")
+
+	fmt.Fprintln(w, ti.TaskInfo("Uninstalling Tekton Pipeline..."))
+	if err := operator.UninstallTektonPipelines(ctx, cl, i.WaitForCleared); util.IgnoreNotFoundErr(err) != nil {
 		return errors.Wrap(err, ti.TaskFailWithTitle("Failed to uninstall Tekton Pipeline"))
 	}
 	fmt.Fprintln(w, ti.TaskSuccess())
@@ -346,7 +381,7 @@ func (i *Uninstall) uninstallShipwright(ctx context.Context, cl *k8s.Clientset, 
 }
 
 func (i *Uninstall) uninstallCertManager(ctx context.Context, cl *k8s.Clientset, operator *common.Operator) error {
-	ctx, done := context.WithTimeout(ctx, 10*time.Minute)
+	ctx, done := context.WithCancel(ctx)
 	defer done()
 
 	ti := util.NewTaskInformer("CERTMANAGER")
@@ -360,7 +395,7 @@ func (i *Uninstall) uninstallCertManager(ctx context.Context, cl *k8s.Clientset,
 }
 
 func (i *Uninstall) uninstallIngress(ctx context.Context, cl *k8s.Clientset, operator *common.Operator) error {
-	ctx, done := context.WithTimeout(ctx, 10*time.Minute)
+	ctx, done := context.WithCancel(ctx)
 	defer done()
 
 	ti := util.NewTaskInformer("INGRESS")
@@ -374,7 +409,7 @@ func (i *Uninstall) uninstallIngress(ctx context.Context, cl *k8s.Clientset, ope
 }
 
 func (i *Uninstall) uninstallOpenFunction(ctx context.Context, cl *k8s.Clientset, operator *common.Operator) error {
-	ctx, done := context.WithTimeout(ctx, 10*time.Minute)
+	ctx, done := context.WithCancel(ctx)
 	defer done()
 
 	ti := util.NewTaskInformer("OPENFUNCTION")

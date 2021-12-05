@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/OpenFunction/cli/pkg/dependency"
@@ -18,11 +19,11 @@ import (
 )
 
 const (
-	kubernetestVersionLabel = "app.kubernetes.io/version"
-	podReadyCMDTmpl         = "kubectl get pod --namespace %s -l %s -o jsonpath='{.items[0].status.conditions[?(@.type == \"Ready\")].status}'"
-	KubectlCreate           = "create"
-	KubectlApply            = "apply"
-	KubectlDelete           = "delete"
+	k8sVersionLabel = "app.kubernetes.io/version"
+	k8sNameLabel    = "app.kubernetes.io/name"
+	KubectlCreate   = "create"
+	KubectlApply    = "apply"
+	KubectlDelete   = "delete"
 
 	DaprInRegionCn               = "DaprInRegionCN"
 	Dapr                         = "Dapr"
@@ -94,14 +95,16 @@ type Operator struct {
 	verbose                bool
 	executor               dependency.OperatorExecutor
 	downloadDaprClientFunc func(inRegionCN bool, verbose bool) error
+	timeout                time.Duration
 }
 
-func NewOperator(os string, version string, inRegionCN bool, verbose bool) *Operator {
+func NewOperator(os string, version string, timeout time.Duration, inRegionCN bool, verbose bool) *Operator {
 	op := &Operator{
 		os:         os,
 		version:    version,
 		inRegionCN: inRegionCN,
 		verbose:    verbose,
+		timeout:    timeout,
 	}
 	switch os {
 	case "linux":
@@ -133,12 +136,7 @@ func (o *Operator) InstallKeda(ctx context.Context) error {
 }
 
 func (o *Operator) CheckKedaIsReady(ctx context.Context, cl *k8s.Clientset) error {
-	deployments := []string{
-		"keda-metrics-apiserver",
-		"keda-operator",
-	}
-
-	return checkDeploymentIsReady(ctx, cl, KedaNamespace, deployments, 5*time.Minute)
+	return checkDeploymentIsReady(ctx, cl, KedaNamespace)
 }
 
 func (o *Operator) InstallKnativeServing(ctx context.Context) error {
@@ -160,7 +158,6 @@ func (o *Operator) InstallKnativeServing(ctx context.Context) error {
 
 func (o *Operator) InstallKourier(ctx context.Context, cl *k8s.Clientset) error {
 	var yamlFile string
-	//patchCMD := "kubectl patch configmap/config-network --namespace knative-serving --type merge --patch '{\"data\":{\"ingress.class\":\"kourier.ingress.networking.knative.dev\"}}'"
 
 	patchData := map[string]string{
 		"ingress.class": "kourier.ingress.networking.knative.dev",
@@ -189,9 +186,6 @@ func (o *Operator) InstallKourier(ctx context.Context, cl *k8s.Clientset) error 
 	); err != nil {
 		return err
 	}
-	//if _, _, err := o.executor.Exec(patchCMD); err != nil {
-	//	return err
-	//}
 	return nil
 }
 
@@ -206,16 +200,7 @@ func (o *Operator) ConfigKnativeServingDefaultDomain(ctx context.Context) error 
 }
 
 func (o *Operator) CheckKnativeServingIsReady(ctx context.Context, cl *k8s.Clientset) error {
-	deployments := []string{
-		"activator",
-		"autoscaler",
-		"controller",
-		"domain-mapping",
-		"domainmapping-webhook",
-		"net-kourier-controller",
-		"webhook",
-	}
-	return checkDeploymentIsReady(ctx, cl, KnativeServingNamespace, deployments, 5*time.Minute)
+	return checkDeploymentIsReady(ctx, cl, KnativeServingNamespace)
 }
 
 func (o *Operator) InstallShipwright(ctx context.Context) error {
@@ -237,23 +222,17 @@ func (o *Operator) InstallShipwright(ctx context.Context) error {
 }
 
 func (o *Operator) CheckShipwrightIsReady(ctx context.Context, cl *k8s.Clientset) error {
-	tkDeployments := []string{
-		"tekton-pipelines-controller",
-		"tekton-pipelines-webhook",
-	}
-	swDeployments := []string{
-		"shipwright-build-controller",
-	}
+	ctx, done := context.WithCancel(ctx)
+	defer done()
 
-	grp, gctx := errgroup.WithContext(ctx)
-	defer gctx.Done()
+	grp, ctx := errgroup.WithContext(ctx)
 
 	grp.Go(func() error {
-		return checkDeploymentIsReady(ctx, cl, TektonPipelineNamespace, tkDeployments, 5*time.Minute)
+		return checkDeploymentIsReady(ctx, cl, TektonPipelineNamespace)
 	})
 
 	grp.Go(func() error {
-		return checkDeploymentIsReady(ctx, cl, ShipwrightNamespace, swDeployments, 5*time.Minute)
+		return checkDeploymentIsReady(ctx, cl, ShipwrightNamespace)
 	})
 	return grp.Wait()
 }
@@ -269,12 +248,19 @@ func (o *Operator) InstallCertManager(ctx context.Context) error {
 }
 
 func (o *Operator) CheckCertManagerIsReady(ctx context.Context, cl *k8s.Clientset) error {
-	deployments := []string{
-		"cert-manager",
-		"cert-manager-cainjector",
-		"cert-manager-webhook",
+	if err := checkDeploymentIsReady(ctx, cl, CertManagerNamespace); err != nil {
+		return err
+	} else {
+		if err := checkPodIsReady(
+			ctx,
+			cl,
+			CertManagerNamespace,
+			fmt.Sprintf("%s=%s", k8sNameLabel, "webhook"),
+		); err != nil {
+			return err
+		}
 	}
-	return checkDeploymentIsReady(ctx, cl, CertManagerNamespace, deployments, 5*time.Minute)
+	return nil
 }
 
 func (o *Operator) InstallIngressNginx(ctx context.Context) error {
@@ -288,11 +274,7 @@ func (o *Operator) InstallIngressNginx(ctx context.Context) error {
 }
 
 func (o *Operator) CheckIngressNginxIsReady(ctx context.Context, cl *k8s.Clientset) error {
-	deployments := []string{
-		"ingress-nginx-controller",
-	}
-
-	return checkDeploymentIsReady(ctx, cl, IngressNginxNamespace, deployments, 5*time.Minute)
+	return checkDeploymentIsReady(ctx, cl, IngressNginxNamespace)
 }
 
 func (o *Operator) InstallOpenFunction(ctx context.Context) error {
@@ -302,15 +284,18 @@ func (o *Operator) InstallOpenFunction(ctx context.Context) error {
 	} else {
 		yamlFile = fmt.Sprintf(onlineFileMap[OpenfunctionTmpl], o.version)
 	}
-	return o.executor.KubectlApplyAndCreateAndDelete(ctx, KubectlCreate, yamlFile)
+	if err := o.executor.KubectlApplyAndCreateAndDelete(
+		ctx,
+		KubectlCreate,
+		yamlFile,
+	); err != nil && !strings.Contains(err.Error(), "already exists") {
+		return err
+	}
+	return nil
 }
 
 func (o *Operator) CheckOpenFunctionIsReady(ctx context.Context, cl *k8s.Clientset) error {
-	deployments := []string{
-		"openfunction-controller-manager",
-	}
-
-	return checkDeploymentIsReady(ctx, cl, OpenFunctionNamespace, deployments, 5*time.Minute)
+	return checkDeploymentIsReady(ctx, cl, OpenFunctionNamespace)
 }
 
 func (o *Operator) UninstallDapr(ctx context.Context, cl *k8s.Clientset, waitForCleared bool) error {
@@ -326,7 +311,7 @@ func (o *Operator) UninstallDapr(ctx context.Context, cl *k8s.Clientset, waitFor
 	}
 
 	if waitForCleared {
-		return checkNamespaceIsCleared(ctx, cl, DaprNamespace, 5*time.Minute)
+		return checkNamespaceIsCleared(ctx, cl, DaprNamespace)
 	}
 	return nil
 }
@@ -344,7 +329,7 @@ func (o *Operator) UninstallKeda(ctx context.Context, cl *k8s.Clientset, waitFor
 	}
 
 	if waitForCleared {
-		return checkNamespaceIsCleared(ctx, cl, KedaNamespace, 5*time.Minute)
+		return checkNamespaceIsCleared(ctx, cl, KedaNamespace)
 	}
 	return nil
 }
@@ -360,6 +345,7 @@ func (o *Operator) UninstallKnativeServing(ctx context.Context, cl *k8s.Clientse
 		crdYamlFile = onlineFileMap[KnativeServingCrd]
 		coreYamlFile = onlineFileMap[KnativeServingCore]
 	}
+
 	if err := o.executor.KubectlApplyAndCreateAndDelete(ctx, KubectlDelete, crdYamlFile); err != nil {
 		return err
 	}
@@ -368,7 +354,7 @@ func (o *Operator) UninstallKnativeServing(ctx context.Context, cl *k8s.Clientse
 	}
 
 	if waitForCleared {
-		return checkNamespaceIsCleared(ctx, cl, KnativeServingNamespace, 5*time.Minute)
+		return checkNamespaceIsCleared(ctx, cl, KnativeServingNamespace)
 	}
 	return nil
 }
@@ -387,45 +373,46 @@ func (o *Operator) UninstallKourier(ctx context.Context, cl *k8s.Clientset, wait
 	}
 
 	if waitForCleared {
-		return checkNamespaceIsCleared(ctx, cl, KourierNamespace, 5*time.Minute)
+		return checkNamespaceIsCleared(ctx, cl, KourierNamespace)
 	}
 	return nil
 }
 
 func (o *Operator) UninstallShipwright(ctx context.Context, cl *k8s.Clientset, waitForCleared bool) error {
-	var tektonPipelineYamlFile string
-	var shipwrightYamlFile string
+	var yamlFile string
 
 	if o.inRegionCN {
-		tektonPipelineYamlFile = onlineFileMap[TektonPipelineInRegionCn]
-		shipwrightYamlFile = onlineFileMap[ShipwrightInRegionCn]
+		yamlFile = onlineFileMap[ShipwrightInRegionCn]
 	} else {
-		tektonPipelineYamlFile = onlineFileMap[TektonPipeline]
-		shipwrightYamlFile = onlineFileMap[Shipwright]
+		yamlFile = onlineFileMap[Shipwright]
 	}
 
-	if err := o.executor.KubectlApplyAndCreateAndDelete(ctx, KubectlDelete, tektonPipelineYamlFile); err != nil {
-		return err
-	}
-	if err := o.executor.KubectlApplyAndCreateAndDelete(ctx, KubectlDelete, shipwrightYamlFile); err != nil {
+	if err := o.executor.KubectlApplyAndCreateAndDelete(ctx, KubectlDelete, yamlFile); err != nil {
 		return err
 	}
 
 	if waitForCleared {
-		grp, gctx := errgroup.WithContext(ctx)
-		defer gctx.Done()
+		return checkNamespaceIsCleared(ctx, cl, ShipwrightNamespace)
+	}
+	return nil
+}
 
-		grp.Go(func() error {
-			return checkNamespaceIsCleared(gctx, cl, TektonPipelineNamespace, 5*time.Minute)
-		})
+func (o *Operator) UninstallTektonPipelines(ctx context.Context, cl *k8s.Clientset, waitForCleared bool) error {
+	var yamlFile string
 
-		grp.Go(func() error {
-			return checkNamespaceIsCleared(gctx, cl, ShipwrightNamespace, 5*time.Minute)
-		})
-
-		return grp.Wait()
+	if o.inRegionCN {
+		yamlFile = onlineFileMap[TektonPipelineInRegionCn]
+	} else {
+		yamlFile = onlineFileMap[TektonPipeline]
 	}
 
+	if err := o.executor.KubectlApplyAndCreateAndDelete(ctx, KubectlDelete, yamlFile); err != nil {
+		return err
+	}
+
+	if waitForCleared {
+		return checkNamespaceIsCleared(ctx, cl, TektonPipelineNamespace)
+	}
 	return nil
 }
 
@@ -443,7 +430,7 @@ func (o *Operator) UninstallCertManager(ctx context.Context, cl *k8s.Clientset, 
 	}
 
 	if waitForCleared {
-		return checkNamespaceIsCleared(ctx, cl, CertManagerNamespace, 5*time.Minute)
+		return checkNamespaceIsCleared(ctx, cl, CertManagerNamespace)
 	}
 	return nil
 }
@@ -461,9 +448,8 @@ func (o *Operator) UninstallIngressNginx(ctx context.Context, cl *k8s.Clientset,
 	}
 
 	if waitForCleared {
-		return checkNamespaceIsCleared(ctx, cl, IngressNginxNamespace, 5*time.Minute)
+		return checkNamespaceIsCleared(ctx, cl, IngressNginxNamespace)
 	}
-
 	return nil
 }
 
@@ -480,7 +466,7 @@ func (o *Operator) UninstallOpenFunction(ctx context.Context, cl *k8s.Clientset,
 	}
 
 	if waitForCleared {
-		return checkNamespaceIsCleared(ctx, cl, OpenFunctionNamespace, 5*time.Minute)
+		return checkNamespaceIsCleared(ctx, cl, OpenFunctionNamespace)
 	}
 
 	return nil
@@ -490,15 +476,9 @@ func checkDeploymentIsReady(
 	ctx context.Context,
 	cl *k8s.Clientset,
 	ns string,
-	deployments []string, timeout time.Duration) error {
-	nctx, cancelFunc := context.WithTimeout(ctx, timeout)
-	defer cancelFunc()
-
-	dplStatus := map[string]bool{}
-	for _, dpl := range deployments {
-		dplStatus[dpl] = false
-	}
-	readyCount := 0
+) error {
+	ctx, done := context.WithCancel(ctx)
+	defer done()
 
 	t := time.NewTicker(5 * time.Second)
 	defer t.Stop()
@@ -506,27 +486,25 @@ func checkDeploymentIsReady(
 	for {
 		select {
 		case <-t.C:
-			for _, dpl := range deployments {
-				if !dplStatus[dpl] {
-					if deploy, err := cl.AppsV1().Deployments(ns).Get(ctx, dpl, metav1.GetOptions{}); err == nil {
-						if status := getDeploymentStatusByType(
-							deploy.Status.Conditions,
-							appsv1.DeploymentAvailable,
-						); status != nil && *status == corev1.ConditionTrue {
-							dplStatus[dpl] = true
-							readyCount += 1
-						}
+			if dpls, err := cl.AppsV1().Deployments(ns).List(ctx, metav1.ListOptions{}); err == nil {
+				ready := 0
+				for _, deploy := range dpls.Items {
+					if status := getDeploymentStatusByType(
+						deploy.Status.Conditions,
+						appsv1.DeploymentAvailable,
+					); status != nil && *status == corev1.ConditionTrue {
+						ready += 1
 					}
 				}
+				if len(dpls.Items) != ready {
+					t.Reset(5 * time.Second)
+				} else {
+					return nil
+				}
 			}
-			if len(deployments) != readyCount {
-				t.Reset(5 * time.Second)
-			} else {
-				return nil
-			}
-		case <-nctx.Done():
+		case <-ctx.Done():
 			return errors.Wrap(
-				nctx.Err(),
+				ctx.Err(),
 				"context marked done. stopping check loop",
 			)
 		}
@@ -549,10 +527,9 @@ func checkNamespaceIsCleared(
 	ctx context.Context,
 	cl *k8s.Clientset,
 	ns string,
-	timeout time.Duration,
 ) error {
-	nctx, cancelFunc := context.WithTimeout(ctx, timeout)
-	defer cancelFunc()
+	ctx, done := context.WithCancel(ctx)
+	defer done()
 
 	t := time.NewTicker(5 * time.Second)
 	defer t.Stop()
@@ -564,9 +541,9 @@ func checkNamespaceIsCleared(
 				return nil
 			}
 			t.Reset(5 * time.Second)
-		case <-nctx.Done():
+		case <-ctx.Done():
 			return errors.Wrap(
-				nctx.Err(),
+				ctx.Err(),
 				"context marked done. stopping check loop",
 			)
 		}
@@ -578,10 +555,9 @@ func checkPodIsReady(
 	cl *k8s.Clientset,
 	ns string,
 	label string,
-	timeout time.Duration,
 ) error {
-	nctx, cancelFunc := context.WithTimeout(ctx, timeout)
-	defer cancelFunc()
+	ctx, done := context.WithCancel(ctx)
+	defer done()
 
 	t := time.NewTicker(5 * time.Second)
 	defer t.Stop()
@@ -600,9 +576,9 @@ func checkPodIsReady(
 				}
 			}
 			t.Reset(5 * time.Second)
-		case <-nctx.Done():
+		case <-ctx.Done():
 			return errors.Wrap(
-				nctx.Err(),
+				ctx.Err(),
 				"context marked done. stopping check loop",
 			)
 		}
@@ -631,7 +607,7 @@ func GetExistComponentVersion(ctx context.Context, cl *k8s.Clientset, ns string,
 		} else {
 			labels = deploy.Spec.Template.GetLabels()
 		}
-		if version, ok := labels[kubernetestVersionLabel]; !ok {
+		if version, ok := labels[k8sVersionLabel]; !ok {
 			return ""
 		} else {
 			return version
