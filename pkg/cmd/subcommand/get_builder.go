@@ -6,11 +6,12 @@ import (
 
 	client "github.com/OpenFunction/cli/pkg/client"
 	"github.com/OpenFunction/cli/pkg/cmd/util"
-	openfunction "github.com/openfunction/apis/core/v1alpha1"
 	"github.com/spf13/cobra"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/cli-runtime/pkg/genericclioptions"
+
+	openfunction "github.com/openfunction/apis/core/v1alpha1"
 )
 
 type getBuilder struct {
@@ -25,17 +26,17 @@ type getBuilder struct {
 const (
 	getbulderExample = `
 # List all builder in output format
-fn get builder
+ofn get builder
 
 # Get builder in JSON output format
-fn get builder sample-builder-m5sbv -o json
+ofn get builder sample-builder-m5sbv -o json
 
 # Get builder in YAML output format
-fn get builder sample-builder-m5sbv -o yaml
+ofn get builder sample-builder-m5sbv -o yaml
 `
 
 	getBuildLong = `
-Prints a table fn the most important information.
+Prints a table ofn the most important information.
 `
 )
 

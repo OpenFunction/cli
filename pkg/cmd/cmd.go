@@ -27,10 +27,10 @@ func NewDefaultCommandWithArgs(args []string, in io.Reader, out, errout io.Write
 // NewCommand creates the command
 func NewCommand(in io.Reader, out, errout io.Writer) *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "fn",
-		Short: "fn controller the openfunction manager",
+		Use:   "ofn",
+		Short: "ofn controller the openfunction manager",
 		Long: `
-fn controller the openfunction manager.
+ofn controller the openfunction manager.
 
 Find more information at:
     https://https://github.com/OpenFunction/OpenFunction/blob/main/README.md

@@ -28,7 +28,7 @@ type Apply struct {
 const (
 	applyExample = `
 # Apply a function using the data in function.yaml
-fn apply -f function.yaml
+ofn apply -f function.yaml
 
 # Create a function based on the YAML passed into stdin
 cat function.yaml | fn apply -f -

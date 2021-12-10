@@ -199,3 +199,16 @@ func (ti *TaskInformer) PrintTable(inventory map[string]string) {
 	t.AppendSeparator()
 	t.Render()
 }
+
+func (ti *TaskInformer) TipsOnUsingKnative() {
+	fmt.Println(YellowItalic("Notice that you are using Knative runtime, " +
+		"you can refer to the following to configure Knative's network layer (Assuming you are using Kourier) and DNS. \n" +
+		"Where 1.2.3.4 can be replaced by your node address or loadbalancer address:"))
+	fmt.Println(YellowItalic("\n -> Configure the externalIPs for the Kourier service"))
+	fmt.Println("kubectl patch svc -n kourier-system kourier \\\n" +
+		"  -p '{\"spec\": {\"type\": \"LoadBalancer\", \"externalIPs\": [\"1.2.3.4\"]}}'")
+	fmt.Println(YellowItalic("\n -> Configure the domain by using MagicDNS"))
+	fmt.Println("kubectl patch configmap/config-domain -n knative-serving \\\n" +
+		"  --type merge --patch '{\"data\":{\"1.2.3.4.sslip.io\":\"\"}}'")
+	fmt.Println()
+}

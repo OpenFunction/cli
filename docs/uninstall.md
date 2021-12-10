@@ -1,4 +1,4 @@
-# fn uninstall
+# ofn uninstall
 
 This command will help you to uninstall OpenFunction and its dependencies.
 
@@ -27,13 +27,13 @@ This command will help you to uninstall OpenFunction and its dependencies.
 #### Uninstalling OpenFunction with a specify runtime
 
 ```shell
-fn uninstall --async
+ofn uninstall --async
 ```
 
 or
 
 ```shell
-fn uninstall --knative
+ofn uninstall --knative
 ```
 
 #### Support users in China to uninstall
@@ -41,7 +41,7 @@ fn uninstall --knative
 > This only makes sense when you have installed OpenFunction (and its dependencies) with the `--region-cn` parameter.
 
 ```shell
-fn uninstall --region-cn --all
+ofn uninstall --region-cn --all
 ```
 
 #### You can wait for the end of the installation process
@@ -49,12 +49,23 @@ fn uninstall --region-cn --all
 > It will take time to wait for namespaces cleanup
 
 ```shell
-fn uninstall  --all --wait
+ofn uninstall  --all --wait
 ```
 
 #### Supports uninstallation of multiple versions of OpenFunction
 
 ```shell
-fn uninstall --version latest
+ofn uninstall --version latest
 ```
 
+## Inventory
+
+During installation, the OpenFunction CLI records the inventory of installed components to the `$home/.ofn/inventory.yaml`. So during the uninstallation, the OpenFunction CLI will remove the relevant components based on the contents of `$home/.ofn/inventory.yaml`.
+
+In addition, the OpenFunction CLI supports getting the version of the component and the path to the component's yaml file from the environment variable. You can refer to the [Environment variables](install.md#environment-variables) for more information.
+
+Please note that during the process of uninstalling a component, the information will be obtained according to the following order of priority:
+
+```
+yaml file environment variables > version environment variables > $home/.ofn/inventory.yaml
+```
