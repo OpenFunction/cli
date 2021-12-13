@@ -24,7 +24,7 @@ This command will help you to install OpenFunction and its dependencies.
 
 ## Use Cases
 
-#### Installing OpenFunction with a specify runtime
+### Install OpenFunction with a specified runtime
 
 ```shell
 ofn install --async
@@ -36,69 +36,67 @@ or
 ofn install --knative
 ```
 
-#### Support for users in China to speed up the installation process
-
-> This requires that you should also add the `--region-cn` parameter when executing the uninstall operation
+### Install OpenFunction with limited access to gcr.io or github.com
 
 ```shell
 ofn install --region-cn --all
 ```
 
-#### Overwrite existing components in the cluster with the --upgrade parameter
+> You'll need to add `--region-cn` to the uninstall cmd too if OpenFunction is installed with this flag.
+
+### Overwrite existing components in the cluster with default or specified versions
 
 ```shell
 ofn install --upgrade --all
 ```
 
-#### Supports installation of multiple versions of OpenFunction
+### Install a specified version of OpenFunction
 
 ```shell
 ofn install --version latest
 ```
 
-## Inventory
+## The default compatibility matrix
 
-Because different versions of OpenFunction depend on different lists of components, and some components have specific requirements for the version of the Kubernetes server at the same time.
+OpenFunction relies on several components like Knative Serving, Dapr, Keda, Shipwright, and Tekton. Some of these components require a specified version of Kubernetes.
 
-The OpenFunction CLI provides a default installation inventory for each scenario. By default, you will complete the installation process based on the default installation inventory.
+The OpenFunction CLI provides a default compatibility matrix based on which OpenFunction CLI will install a default selected version of each component for each version of kubernetes. 
 
-The OpenFunction CLI records the inventory of installed components in YAML format to the `$home/.ofn/inventory.yaml`.
+The OpenFunction CLI keeps the installed component details in `$home/.ofn/inventory.yaml`.
 
-### Default inventory under different versions of kubernetes
+| Components             | Kubernetes 1.17 | Kubernetes 1.18 | Kubernetes 1.19 | Kubernetes 1.20+ | CLI Option       | Description                                    |
+| ---------------------- | --------------- | --------------- | --------------- | ---------------- | ---------------- | ---------------------------------------------- |
+| Knative Serving        | 0.21.1          | 0.23.3          | 0.25.2          | 1.0.1            | `--knative`      | The synchronous function runtime               |
+| Kourier                | 0.21.0          | 0.23.0          | 0.25.0          | 1.0.1            | `--knative`      | The default network layer for Knative          |
+| Serving Default Domain | 0.21.0          | 0.23.0          | 0.25.0          | 1.0.1            | `--knative`      | The default DNS layout for Knative             |
+| Dapr                   | 1.5.1           | 1.5.1           | 1.5.1           | 1.5.1            | `--async`        | The distributed application runtime of asynchronous function |
+| Keda                   | 2.4.0           | 2.4.0           | 2.4.0           | 2.4.0            | `--async`        | The autoscaler of asynchronous function runtime|
+| Shipwright             | 0.6.1           | 0.6.1           | 0.6.1           | 0.6.1            | `--shipwright`   | The function build framework                   |
+| Tekton Pipelines       | 0.23.0          | 0.26.0          | 0.29.0          | 0.30.0           | `--shipwright`   | The function build pipeline                    |
+| Cert Manager           | 1.5.4           | 1.5.4           | 1.5.4           | 1.5.4            | `--cert-manager` | OpenFunction webhook Certificate manager (For OpenFunction v0.4.0+ only). |
+| Ingress Nginx          | na              | na              | 1.1.0           | 1.1.0            | `--ingress`      | Function ingress controller (For OpenFunction v0.4.0+ only). |
 
-> The function ingress capability of OpenFunction (i.e. OpenFunction Domain) can only be used in Kubernetes v1.19+.
+> The function ingress capability (i.e. OpenFunction Domain) can only be used in Kubernetes v1.19+.
 
-| Components             | Kubernetes 1.17 | Kubernetes 1.18 | Kubernetes 1.19 | Kubernetes 1.20+ | Description                                                  |
-| ---------------------- | --------------- | --------------- | --------------- | ---------------- | ------------------------------------------------------------ |
-| Knative Serving        | 0.21.1          | 0.23.3          | 0.25.2          | 1.0.1            | Controlled by the `--knative` option, provides synchronous function serving runtime capability |
-| Kourier                | 0.21.0          | 0.23.0          | 0.25.0          | 1.0.1            | Controlled by the `--knative` option, as the default network layer for the Knative service |
-| Serving Default Domain | 0.21.0          | 0.23.0          | 0.25.0          | 1.0.1            | Controlled by the `--knative` option, as the default DNS layout for the Knative service |
-| Dapr                   | 1.5.1           | 1.5.1           | 1.5.1           | 1.5.1            | Controlled by the `--async` option, collaboration with KEDA to provide asynchronous function serving runtime capability |
-| Keda                   | 2.4.0           | 2.4.0           | 2.4.0           | 2.4.0            | Controlled by the `--async` option, collaboration with Dapr to provide asynchronous function serving runtime capability |
-| Shipwright             | 0.6.1           | 0.6.1           | 0.6.1           | 0.6.1            | Controlled by the `--shipwright` option, collaboration with Tekton to provide image building capability |
-| Tekton Pipelines       | 0.23.0          | 0.26.0          | 0.29.0          | 0.30.0           | Controlled by the `--shipwright` option, collaboration with Shipwright to provide image building capability |
-| Cert Manager           | 1.5.4           | 1.5.4           | 1.5.4           | 1.5.4            | Controlled by the `--cert-manager` option, provides certificate management capability for OpenFunction webhook. For OpenFunction v0.4.0+. |
-| Ingress Nginx          | na              | na              | 1.1.0           | 1.1.0            | Controlled by the `--ingres` option, provides function ingress capability. For OpenFunction latest. |
+## Customize components installation
 
-## Environment variables
+To increase the flexibility of the installation, the OpenFunction CLI supports using environment variables to customize the versions of dependent components.
 
-To increase the flexibility of the installation process, in addition to the default inventory, the OpenFunction CLI supports the use of environment variables to control the versions of dependent components that need to be installed.
-
-> Before using these variables, please ensure that you are aware that there are no compatibility issues between components.
+> Before using these environment variables, please make sure that there are no compatibility issues between the selected component and Kubernetes.
 >
-> And if you used the following environment variables during the installation process, please ensure that they are also present when you perform the uninstall operation.
+> And if you use environment variables during installation, please ensure that they are also present with the same value set during uninstallation.
 >
-> Please note that during the process of installing a component, the information will be obtained according to the following order of priority:
+> Please note that when installing a component, the customized component information will be obtained in the following order:
 >
 > ```
 > yaml file environment variables > version environment variables
 > ```
 
-### Version
+### Customize component version
 
-The following are references to component version environment variables. 
+The following are specs of component version environment variables. 
 
-| Value                    | Description                                                  | Example        |
+| Variable name            | Description                                                  | Example values |
 | ------------------------ | ------------------------------------------------------------ | -------------- |
 | DAPR_VERSION             | Version of Dapr                                              | 1.4.3, 1.5.1   |
 | KEDA_VERSION             | Version of Keda                                              | 2.4.0, 2.5.0   |
@@ -110,13 +108,13 @@ The following are references to component version environment variables.
 | INGRESS_NGINX_VERSION    | Version of Ingress Nginx                                     | 1.1.0          |
 | CERT_MANAGER_VERSION     | Version of Cert Manager                                      | 1.5.4          |
 
-### Yaml File
+### Customize component yaml file
 
-The following are references to component yaml file environment variables. 
+The following are specs of component yaml file environment variables. 
 
 > You can use any value supported by kubectl's `--filename` option.
 
-| Value                     | Description                                                  |
+| Variable name             | Description                                                  |
 | ------------------------- | ------------------------------------------------------------ |
 | KEDA_YAML                 | Path of Keda yaml file                                       |
 | KNATIVE_SERVING_CRD_YAML  | Path of Knative Serving crds yaml file                       |
