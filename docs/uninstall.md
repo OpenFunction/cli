@@ -60,11 +60,11 @@ ofn uninstall --version latest
 
 ## Inventory
 
-During installation, the OpenFunction CLI records the inventory of installed components to the `$home/.ofn/inventory.yaml`. So during the uninstallation, the OpenFunction CLI will remove the relevant components based on the contents of `$home/.ofn/inventory.yaml`.
+During installation, the OpenFunction CLI keeps the installed component details in `$home/.ofn/inventory.yaml`. So during the uninstallation, the OpenFunction CLI will remove the relevant components based on the contents of `$home/.ofn/inventory.yaml`.
 
-In addition, the OpenFunction CLI supports getting the version of the component and the path to the component's yaml file from the environment variable. You can refer to the [Environment variables](install.md#environment-variables) for more information.
+In addition, the OpenFunction CLI supports obtaining the version of the component and the path to the component's yaml file from the environment variable. You can refer to the [Environment variables](install.md#environment-variables) for more information.
 
-Please note that during the process of uninstalling a component, the information will be obtained according to the following order of priority:
+Please note that during uninstallation, the customized component information will be obtained in the following order:
 
 ```
 yaml file environment variables > version environment variables > $home/.ofn/inventory.yaml
