@@ -93,9 +93,9 @@ func (e *Executor) RecordInventory(ctx context.Context, inventoryMap map[string]
 		}
 	}
 
-	fileName := filepath.Join(dirname, components.OpenFunctionDir, components.RecordFileName)
-	file, err := os.Open(fileName)
-	if err != nil && !strings.Contains(err.Error(), "file exists") {
+	filePath := filepath.Join(dirname, components.OpenFunctionDir, components.RecordFileName)
+	file, err := os.Open(filePath)
+	if err != nil {
 		return err
 	}
 
@@ -124,7 +124,7 @@ func (e *Executor) RecordInventory(ctx context.Context, inventoryMap map[string]
 		return err
 	}
 
-	err = ioutil.WriteFile(fileName, recordData, 0644)
+	err = ioutil.WriteFile(filePath, recordData, 0644)
 	if err != nil {
 		panic(err)
 	}
@@ -132,14 +132,24 @@ func (e *Executor) RecordInventory(ctx context.Context, inventoryMap map[string]
 }
 
 func (e *Executor) GetInventoryRecord(ctx context.Context) (*inventory.Record, error) {
+	var file *os.File
+
 	dirname, err := os.UserHomeDir()
 	if err != nil {
 		return nil, err
 	}
 
-	fileName := filepath.Join(dirname, components.OpenFunctionDir, components.RecordFileName)
-	file, err := os.Open(fileName)
-	if err != nil && !strings.Contains(err.Error(), "file exists") {
+	filePath := filepath.Join(dirname, components.OpenFunctionDir, components.RecordFileName)
+
+	if _, err := os.Stat(filePath); errors.Is(err, os.ErrNotExist) {
+		file, err = os.Create(filePath)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	file, err = os.Open(filePath)
+	if err != nil {
 		return nil, err
 	}
 
