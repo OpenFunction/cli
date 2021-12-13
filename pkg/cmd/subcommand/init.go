@@ -42,7 +42,7 @@ func NewCmdInit(ioStreams genericclioptions.IOStreams) *cobra.Command {
 		Long: `
 Init a project from the specified framework
 `,
-		Example: "fn init -l go",
+		Example: "ofn init -l go",
 		Run: func(cmd *cobra.Command, args []string) {
 			util.CheckErr(i.ValidateArgs(cmd, args))
 			util.CheckErr(i.RunInit(cmd))

@@ -5,13 +5,16 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"os/signal"
 	"runtime"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/OpenFunction/cli/pkg/client"
 	"github.com/OpenFunction/cli/pkg/cmd/util"
-	"github.com/OpenFunction/cli/pkg/dependency/common"
+	"github.com/OpenFunction/cli/pkg/components/common"
+	"github.com/OpenFunction/cli/pkg/components/inventory"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 	"golang.org/x/sync/errgroup"
@@ -40,11 +43,6 @@ type Uninstall struct {
 	Timeout             time.Duration
 }
 
-func init() {
-	w = os.Stdout
-	availableVersions = []string{"v0.4.0", "latest"}
-}
-
 // NewUninstall returns an initialized Init instance
 func NewUninstall(ioStreams genericclioptions.IOStreams) *Uninstall {
 	return &Uninstall{
@@ -64,7 +62,7 @@ func NewCmdUninstall(restClient util.Getter, ioStreams genericclioptions.IOStrea
 		Long: `
 This command will help you to uninstall OpenFunction and its dependencies.
 
-You can use fn uninstall --all to uninstall all components.
+You can use ofn uninstall --all to uninstall all components.
 
 The dependencies to be uninstalled for OpenFunction v0.3.1 are: Dapr, KEDA, Knative Serving, Shipwright, Tekton Pipelines.
 
@@ -74,7 +72,7 @@ The dependencies to be uninstalled for OpenFunction v0.4.0 are: Dapr, KEDA, Knat
 
 The permitted parameters are: --async, --knative, --shipwright, --cert-manager, --ingress, --version, --verbose, --dry-run
 `,
-		Example: "fn uninstall --all",
+		Example: "ofn uninstall --all",
 		PreRunE: func(cmd *cobra.Command, args []string) (err error) {
 			_, cl, err = client.NewKubeConfigClient()
 			if err != nil {
@@ -133,9 +131,8 @@ func (i *Uninstall) RunUninstall(cl *k8s.Clientset, cmd *cobra.Command) error {
 	ti := util.NewTaskInformer("")
 	continueFunc := func() bool {
 		reader := bufio.NewReader(os.Stdin)
-		fmt.Fprintln(w, ti.BeforeTask("You can see the list of components to be uninstalled "+
-			"and the list of components already exist in the cluster.\n"+
-			"Make sure you know what happens when you do this.\n"+
+		fmt.Fprintln(w, ti.BeforeTask("Please ensure that you understand the meaning of this command "+
+			"and follow the prompts below to confirm the action.\n"+
 			"Enter 'y' to continue and 'n' to abort:"))
 
 		for {
@@ -159,12 +156,30 @@ func (i *Uninstall) RunUninstall(cl *k8s.Clientset, cmd *cobra.Command) error {
 	)
 	defer done()
 
-	inventoryPending := i.checkConditionsAndGetInventory()
-	inventoryExist := getExistComponentsInventory(ctx, cl, true)
+	// Determine which components need to be enabled
+	// and update all options to be consistent.
+	i.mergeConditions()
+	inventoryPending, err := inventory.GetInventory(
+		cl,
+		i.RegionCN,
+		i.WithKnative,
+		i.WithKeda,
+		i.WithDapr,
+		i.WithShipWright,
+		i.WithCertManager,
+		i.WithIngress,
+		i.OpenFunctionVersion,
+	)
+	if err != nil {
+		return errors.Wrap(err, "failed to get pending inventory")
+	}
+	inventoryExist, err := operator.GetInventoryRecord(ctx, true)
+	if err != nil {
+		return errors.Wrap(err, "failed to get inventory record")
+	}
+	operator.Inventory = inventoryPending
 
-	fmt.Fprintln(w, ti.BeforeTask("Start uninstalling OpenFunction and its dependencies.\n"+
-		"Here are the components and corresponding versions to be uninstalled:"))
-	printInventory(inventoryPending)
+	fmt.Fprintln(w, ti.BeforeTask("Start uninstalling OpenFunction and its dependencies."))
 	fmt.Fprintln(w, ti.BeforeTask("The following components already exist:"))
 	printInventory(inventoryExist)
 
@@ -175,55 +190,94 @@ func (i *Uninstall) RunUninstall(cl *k8s.Clientset, cmd *cobra.Command) error {
 		return nil
 	}
 
+	// Record the list of components
+	// that currently exist in the cluster.
+	if _, err := operator.GetInventoryRecord(ctx, false); err != nil {
+		return errors.Wrap(err, "failed to get inventory record")
+	}
+	defer operator.RecordInventory(ctx)
+
+	c := make(chan os.Signal)
+	signal.Notify(c, os.Interrupt, syscall.SIGTERM)
+	go func() {
+		<-c
+		done()
+	}()
+
 	grp, gctx := errgroup.WithContext(ctx)
 
 	start := time.Now()
 
 	if i.WithDapr {
-		grp.Go(func() error {
-			return i.uninstallDapr(gctx, cl, operator)
-		})
+		if operator.Records.Dapr != "" {
+			grp.Go(func() error {
+				return i.uninstallDapr(gctx, cl, operator)
+			})
+		}
 	}
 
 	if i.WithKeda {
-		grp.Go(func() error {
-			return i.uninstallKeda(gctx, cl, operator)
-		})
+		if operator.Records.Keda != "" {
+			grp.Go(func() error {
+				return i.uninstallKeda(gctx, cl, operator)
+			})
+		}
 	}
 
 	if i.WithKnative {
-		grp.Go(func() error {
-			return i.uninstallKnativeServing(gctx, cl, operator)
-		})
-		grp.Go(func() error {
-			return i.uninstallKourier(gctx, cl, operator)
-		})
+		if operator.Records.DefaultDomain != "" {
+			grp.Go(func() error {
+				return i.uninstallServingDefaultDomain(gctx, cl, operator)
+			})
+		}
+
+		if operator.Records.Kourier != "" {
+			grp.Go(func() error {
+				return i.uninstallKourier(gctx, cl, operator)
+			})
+		}
+
+		if operator.Records.KnativeServing != "" {
+			grp.Go(func() error {
+				return i.uninstallKnativeServing(gctx, cl, operator)
+			})
+		}
 	}
 
 	if i.WithShipWright {
-		grp.Go(func() error {
-			return i.uninstallShipwright(gctx, cl, operator)
-		})
-		grp.Go(func() error {
-			return i.uninstallTektonPipelines(gctx, cl, operator)
-		})
+		if operator.Records.Shipwright != "" {
+			grp.Go(func() error {
+				return i.uninstallShipwright(gctx, cl, operator)
+			})
+		}
+		if operator.Records.TektonPipelines != "" {
+			grp.Go(func() error {
+				return i.uninstallTektonPipelines(gctx, cl, operator)
+			})
+		}
 	}
 
-	if i.WithCertManager && i.OpenFunctionVersion != "v0.3.1" {
-		grp.Go(func() error {
-			return i.uninstallCertManager(gctx, cl, operator)
-		})
+	if i.WithCertManager {
+		if operator.Records.CertManager != "" {
+			grp.Go(func() error {
+				return i.uninstallCertManager(gctx, cl, operator)
+			})
+		}
 	}
 
-	if i.WithIngress && i.OpenFunctionVersion != "v0.3.1" {
-		grp.Go(func() error {
-			return i.uninstallIngress(gctx, cl, operator)
-		})
+	if i.WithIngress {
+		if operator.Records.Ingress != "" {
+			grp.Go(func() error {
+				return i.uninstallIngress(gctx, cl, operator)
+			})
+		}
 	}
 
-	grp.Go(func() error {
-		return i.uninstallOpenFunction(gctx, cl, operator)
-	})
+	if operator.Records.OpenFunction != "" {
+		grp.Go(func() error {
+			return i.uninstallOpenFunction(gctx, cl, operator)
+		})
+	}
 
 	if err := grp.Wait(); err != nil {
 		return errors.New(ti.TaskFail(err.Error()))
@@ -234,20 +288,7 @@ func (i *Uninstall) RunUninstall(cl *k8s.Clientset, cmd *cobra.Command) error {
 	return nil
 }
 
-func (i *Uninstall) checkConditionsAndGetInventory() map[string]string {
-	getVersionFromEnv := func(name string, defaultVersion string) string {
-		val, ok := os.LookupEnv(name)
-		if !ok {
-			return defaultVersion
-		} else {
-			return val
-		}
-	}
-
-	inventory := map[string]string{
-		"OpenFunction": i.OpenFunctionVersion,
-	}
-
+func (i *Uninstall) mergeConditions() {
 	// Update the corresponding conditions when WithAll is true
 	if i.WithAll {
 		i.WithDapr = true
@@ -267,33 +308,6 @@ func (i *Uninstall) checkConditionsAndGetInventory() map[string]string {
 	// Update the corresponding conditions when WithSyncRuntime is true
 	//if i.WithSyncRuntime {
 	//}
-
-	if i.WithDapr {
-		inventory["Dapr"] = getVersionFromEnv(OpenFunctionDaprVersion, DefaultDaprVersion)
-	}
-
-	if i.WithKeda {
-		inventory["Keda"] = getVersionFromEnv(OpenFunctionKedaVersion, DefaultKedaVersion)
-	}
-
-	if i.WithKnative {
-		inventory["Knative Serving"] = getVersionFromEnv(OpenFunctionKnativeServingVersion, DefaultKnativeServingVersion)
-	}
-
-	if i.WithCertManager {
-		inventory["Cert Manager"] = getVersionFromEnv(OpenFunctionCertManagerVersion, DefaultCertManagerVersion)
-	}
-
-	if i.WithIngress {
-		inventory["Ingress Nginx"] = getVersionFromEnv(OpenFunctionIngressNginxVersion, DefaultIngressNginxVersion)
-	}
-
-	if i.WithShipWright {
-		inventory["Tekton Pipelines"] = getVersionFromEnv(OpenFunctionTektonPipelinesVersion, DefaultTektonPipelinesVersion)
-		inventory["Shipwright"] = getVersionFromEnv(OpenFunctionShipwrightVersion, DefaultShipwrightVersion)
-	}
-
-	return inventory
 }
 
 func (i *Uninstall) uninstallDapr(ctx context.Context, cl *k8s.Clientset, operator *common.Operator) error {
@@ -303,9 +317,13 @@ func (i *Uninstall) uninstallDapr(ctx context.Context, cl *k8s.Clientset, operat
 	ti := util.NewTaskInformer("DAPR")
 
 	fmt.Fprintln(w, ti.TaskInfo("Uninstalling Dapr with Kubernetes mode..."))
-	if err := operator.UninstallDapr(ctx, cl, i.WaitForCleared); util.IgnoreNotFoundErr(err) != nil {
+	if err := operator.UninstallDapr(ctx, cl, i.WaitForCleared); err != nil {
 		return errors.Wrap(err, ti.TaskFailWithTitle("Failed to uninstall Dapr"))
 	}
+
+	// Reset version to null
+	operator.Records.Dapr = ""
+
 	fmt.Fprintln(w, ti.TaskSuccess())
 	return nil
 }
@@ -317,9 +335,19 @@ func (i *Uninstall) uninstallKeda(ctx context.Context, cl *k8s.Clientset, operat
 	ti := util.NewTaskInformer("KEDA")
 
 	fmt.Fprintln(w, ti.TaskInfo("Uninstalling Keda..."))
-	if err := operator.UninstallKeda(ctx, cl, i.WaitForCleared); util.IgnoreNotFoundErr(err) != nil {
+
+	yamls, err := operator.Inventory[inventory.KedaName].GetYamlFile(operator.Records.Keda)
+	if err != nil {
+		return errors.Wrap(err, ti.TaskFailWithTitle("Failed to get yaml file"))
+	}
+
+	if err := operator.Uninstall(ctx, cl, yamls["MAIN"], common.KedaNamespace, false, i.WaitForCleared); err != nil {
 		return errors.Wrap(err, ti.TaskFailWithTitle("Failed to uninstall Keda"))
 	}
+
+	// Reset version to null
+	operator.Records.Keda = ""
+
 	fmt.Fprintln(w, ti.TaskSuccess())
 	return nil
 }
@@ -331,9 +359,43 @@ func (i *Uninstall) uninstallKnativeServing(ctx context.Context, cl *k8s.Clients
 	ti := util.NewTaskInformer("KNATIVE")
 
 	fmt.Fprintln(w, ti.TaskInfo("Uninstalling Knative Serving..."))
-	if err := operator.UninstallKnativeServing(ctx, cl, i.WaitForCleared); util.IgnoreNotFoundErr(err) != nil {
+
+	yamls, err := operator.Inventory[inventory.KnativeServingName].GetYamlFile(operator.Records.KnativeServing)
+	if err != nil {
+		return errors.Wrap(err, ti.TaskFailWithTitle("Failed to get yaml file"))
+	}
+
+	if err := operator.UninstallKnativeServing(ctx, cl, yamls["CRD"], yamls["CORE"], i.WaitForCleared); err != nil {
 		return errors.Wrap(err, ti.TaskFailWithTitle("Failed to uninstall Knative Serving"))
 	}
+
+	// Reset version to null
+	operator.Records.KnativeServing = ""
+
+	fmt.Fprintln(w, ti.TaskSuccess())
+	return nil
+}
+
+func (i *Uninstall) uninstallServingDefaultDomain(ctx context.Context, cl *k8s.Clientset, operator *common.Operator) error {
+	ctx, done := context.WithCancel(ctx)
+	defer done()
+
+	ti := util.NewTaskInformer("KNATIVE")
+
+	fmt.Fprintln(w, ti.TaskInfo("Uninstalling Serving Default Domain..."))
+
+	yamls, err := operator.Inventory[inventory.ServingDefaultDomainName].GetYamlFile(operator.Records.DefaultDomain)
+	if err != nil {
+		return errors.Wrap(err, ti.TaskFailWithTitle("Failed to get yaml file"))
+	}
+
+	if err := operator.Uninstall(ctx, cl, yamls["MAIN"], common.KnativeServingNamespace, false, i.WaitForCleared); err != nil {
+		return errors.Wrap(err, ti.TaskFailWithTitle("Failed to uninstall Serving Default Domain"))
+	}
+
+	// Reset version to null
+	operator.Records.DefaultDomain = ""
+
 	fmt.Fprintln(w, ti.TaskSuccess())
 	return nil
 }
@@ -345,9 +407,19 @@ func (i *Uninstall) uninstallKourier(ctx context.Context, cl *k8s.Clientset, ope
 	ti := util.NewTaskInformer("KOURIER")
 
 	fmt.Fprintln(w, ti.TaskInfo("Uninstalling Kourier..."))
-	if err := operator.UninstallKourier(ctx, cl, i.WaitForCleared); util.IgnoreNotFoundErr(err) != nil {
+
+	yamls, err := operator.Inventory[inventory.KourierName].GetYamlFile(operator.Records.Kourier)
+	if err != nil {
+		return errors.Wrap(err, ti.TaskFailWithTitle("Failed to get yaml file"))
+	}
+
+	if err := operator.Uninstall(ctx, cl, yamls["MAIN"], common.KedaNamespace, false, i.WaitForCleared); err != nil {
 		return errors.Wrap(err, ti.TaskFailWithTitle("Failed to uninstall Kourier"))
 	}
+
+	// Reset version to null
+	operator.Records.Kourier = ""
+
 	fmt.Fprintln(w, ti.TaskSuccess())
 	return nil
 }
@@ -359,9 +431,19 @@ func (i *Uninstall) uninstallShipwright(ctx context.Context, cl *k8s.Clientset, 
 	ti := util.NewTaskInformer("SHIPWRIGHT")
 
 	fmt.Fprintln(w, ti.TaskInfo("Uninstalling Shipwright..."))
-	if err := operator.UninstallShipwright(ctx, cl, i.WaitForCleared); util.IgnoreNotFoundErr(err) != nil {
+
+	yamls, err := operator.Inventory[inventory.ShipwrightName].GetYamlFile(operator.Records.Shipwright)
+	if err != nil {
+		return errors.Wrap(err, ti.TaskFailWithTitle("Failed to get yaml file"))
+	}
+
+	if err := operator.Uninstall(ctx, cl, yamls["MAIN"], common.ShipwrightNamespace, false, i.WaitForCleared); err != nil {
 		return errors.Wrap(err, ti.TaskFailWithTitle("Failed to uninstall Shipwright"))
 	}
+
+	// Reset version to null
+	operator.Records.Shipwright = ""
+
 	fmt.Fprintln(w, ti.TaskSuccess())
 	return nil
 }
@@ -373,9 +455,19 @@ func (i *Uninstall) uninstallTektonPipelines(ctx context.Context, cl *k8s.Client
 	ti := util.NewTaskInformer("TEKTON")
 
 	fmt.Fprintln(w, ti.TaskInfo("Uninstalling Tekton Pipeline..."))
-	if err := operator.UninstallTektonPipelines(ctx, cl, i.WaitForCleared); util.IgnoreNotFoundErr(err) != nil {
+
+	yamls, err := operator.Inventory[inventory.TektonPipelinesName].GetYamlFile(operator.Records.TektonPipelines)
+	if err != nil {
+		return errors.Wrap(err, ti.TaskFailWithTitle("Failed to get yaml file"))
+	}
+
+	if err := operator.Uninstall(ctx, cl, yamls["MAIN"], common.TektonPipelineNamespace, false, i.WaitForCleared); err != nil {
 		return errors.Wrap(err, ti.TaskFailWithTitle("Failed to uninstall Tekton Pipeline"))
 	}
+
+	// Reset version to null
+	operator.Records.TektonPipelines = ""
+
 	fmt.Fprintln(w, ti.TaskSuccess())
 	return nil
 }
@@ -387,9 +479,19 @@ func (i *Uninstall) uninstallCertManager(ctx context.Context, cl *k8s.Clientset,
 	ti := util.NewTaskInformer("CERTMANAGER")
 
 	fmt.Fprintln(w, ti.TaskInfo("Uninstalling Cert Manager..."))
-	if err := operator.UninstallCertManager(ctx, cl, i.WaitForCleared); util.IgnoreNotFoundErr(err) != nil {
+
+	yamls, err := operator.Inventory[inventory.CertManagerName].GetYamlFile(operator.Records.CertManager)
+	if err != nil {
+		return errors.Wrap(err, ti.TaskFailWithTitle("Failed to get yaml file"))
+	}
+
+	if err := operator.Uninstall(ctx, cl, yamls["MAIN"], common.CertManagerNamespace, false, i.WaitForCleared); err != nil {
 		return errors.Wrap(err, ti.TaskFailWithTitle("Failed to uninstall Cert Manager"))
 	}
+
+	// Reset version to null
+	operator.Records.CertManager = ""
+
 	fmt.Fprintln(w, ti.TaskSuccess())
 	return nil
 }
@@ -401,9 +503,19 @@ func (i *Uninstall) uninstallIngress(ctx context.Context, cl *k8s.Clientset, ope
 	ti := util.NewTaskInformer("INGRESS")
 
 	fmt.Fprintln(w, ti.TaskInfo("Uninstalling Ingress..."))
-	if err := operator.UninstallIngressNginx(ctx, cl, i.WaitForCleared); util.IgnoreNotFoundErr(err) != nil {
+
+	yamls, err := operator.Inventory[inventory.IngressName].GetYamlFile(operator.Records.Ingress)
+	if err != nil {
+		return errors.Wrap(err, ti.TaskFailWithTitle("Failed to get yaml file"))
+	}
+
+	if err := operator.Uninstall(ctx, cl, yamls["MAIN"], common.IngressNginxNamespace, false, i.WaitForCleared); err != nil {
 		return errors.Wrap(err, ti.TaskFailWithTitle("Failed to uninstall Ingress"))
 	}
+
+	// Reset version to null
+	operator.Records.Ingress = ""
+
 	fmt.Fprintln(w, ti.TaskSuccess())
 	return nil
 }
@@ -415,9 +527,19 @@ func (i *Uninstall) uninstallOpenFunction(ctx context.Context, cl *k8s.Clientset
 	ti := util.NewTaskInformer("OPENFUNCTION")
 
 	fmt.Fprintln(w, ti.TaskInfo("Uninstalling OpenFunction..."))
-	if err := operator.UninstallOpenFunction(ctx, cl, i.WaitForCleared); util.IgnoreNotFoundErr(err) != nil {
+
+	yamls, err := operator.Inventory[inventory.OpenFunctionName].GetYamlFile(operator.Records.OpenFunction)
+	if err != nil {
+		return errors.Wrap(err, ti.TaskFailWithTitle("Failed to get yaml file"))
+	}
+
+	if err := operator.Uninstall(ctx, cl, yamls["MAIN"], common.OpenFunctionNamespace, false, i.WaitForCleared); err != nil {
 		return errors.Wrap(err, ti.TaskFailWithTitle("Failed to uninstall OpenFunction"))
 	}
+
+	// Reset version to null
+	operator.Records.OpenFunction = ""
+
 	fmt.Fprintln(w, ti.TaskSuccess())
 	return nil
 }

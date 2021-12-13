@@ -5,13 +5,14 @@ import (
 
 	client "github.com/OpenFunction/cli/pkg/client"
 	"github.com/OpenFunction/cli/pkg/cmd/util"
-	openfunction "github.com/openfunction/apis/core/v1alpha1"
 	"github.com/spf13/cobra"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/cli-runtime/pkg/genericclioptions"
 	"k8s.io/cli-runtime/pkg/printers"
 	"k8s.io/cli-runtime/pkg/resource"
+
+	openfunction "github.com/openfunction/apis/core/v1alpha1"
 )
 
 // Create is the commandline for 'create' sub command
@@ -37,10 +38,10 @@ type Create struct {
 const (
 	createExample = `
 # Create a function using the data in function.yaml
-fn create -f function.yaml
+ofn create -f function.yaml
 
 # Create a function based on the YAML passed into stdin
-cat function.yaml | fn create -f -
+cat function.yaml | ofn create -f -
 `
 )
 

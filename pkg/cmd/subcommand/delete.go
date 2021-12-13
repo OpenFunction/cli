@@ -6,11 +6,12 @@ import (
 
 	client "github.com/OpenFunction/cli/pkg/client"
 	"github.com/OpenFunction/cli/pkg/cmd/util"
-	openfunction "github.com/openfunction/apis/core/v1alpha1"
 	"github.com/spf13/cobra"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/cli-runtime/pkg/genericclioptions"
 	"k8s.io/cli-runtime/pkg/resource"
+
+	openfunction "github.com/openfunction/apis/core/v1alpha1"
 )
 
 // Delete is the commandline for 'delete' sub command
@@ -28,13 +29,13 @@ type Delete struct {
 const (
 	deleteExample = `
 # Delete a function using the name specified in demo.yaml
-fn delete -f demo.yaml
+ofn delete -f demo.yaml
 
 # Delete a function based on name in the YAML passed into stdin
-cat demo.yaml | fn delete -f -
+cat demo.yaml | ofn delete -f -
 
 # Delete all functions
-fn delete --all
+ofn delete --all
 `
 )
 

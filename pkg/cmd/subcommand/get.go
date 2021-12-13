@@ -6,11 +6,12 @@ import (
 
 	client "github.com/OpenFunction/cli/pkg/client"
 	"github.com/OpenFunction/cli/pkg/cmd/util"
-	openfunction "github.com/openfunction/apis/core/v1alpha1"
 	"github.com/spf13/cobra"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/cli-runtime/pkg/genericclioptions"
+
+	openfunction "github.com/openfunction/apis/core/v1alpha1"
 )
 
 // Get is the commandline for 'get' sub command
@@ -26,16 +27,16 @@ type Get struct {
 const (
 	getExample = `
 # List all function in output format
-fn get
+ofn get
 
 # Get function in JSON output format
-fn get sample -o json
+ofn get sample -o json
 
 # Get function in YAML output format
-fn get sample -o yaml
+ofn get sample -o yaml
 
-# Return only the state fn build
-fn get sample --template={{.status.build.state}}
+# Return only the state ofn build
+ofn get sample --template={{.status.build.state}}
 `
 	getLong = `
 Prints a table of the most important information.
