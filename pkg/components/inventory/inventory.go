@@ -14,9 +14,9 @@ const (
 	DefaultKnativeServingVersionOnK8Sv118       = "0.23.3"
 	DefaultKnativeServingVersionOnK8Sv119       = "0.25.2"
 	DefaultKnativeServingVersionOnK8Sv120       = "1.0.1"
-	DefaultKourierVersionOnK8Sv117              = "0.21.1"
-	DefaultKourierVersionOnK8Sv118              = "0.23.3"
-	DefaultKourierVersionOnK8Sv119              = "0.25.2"
+	DefaultKourierVersionOnK8Sv117              = "0.21.0"
+	DefaultKourierVersionOnK8Sv118              = "0.23.0"
+	DefaultKourierVersionOnK8Sv119              = "0.25.0"
 	DefaultKourierVersionOnK8Sv120              = "1.0.1"
 	DefaultServingDefaultDomainVersionOnK8Sv117 = "0.21.1"
 	DefaultServingDefaultDomainVersionOnK8Sv118 = "0.23.3"
@@ -27,8 +27,8 @@ const (
 	DefaultTektonPipelinesVersionOnK8Sv119      = "0.29.0"
 	DefaultTektonPipelinesVersionOnK8Sv120      = "0.30.0"
 	DefaultShipwrightVersion                    = "0.6.1"
-	DefaultCertManagerVersion                   = "1.1.0"
-	DefaultIngressNginxVersion                  = "1.5.4"
+	DefaultCertManagerVersion                   = "1.5.4"
+	DefaultIngressNginxVersion                  = "1.1.0"
 	DefaultOpenFunctionVersion                  = "0.4.0"
 )
 

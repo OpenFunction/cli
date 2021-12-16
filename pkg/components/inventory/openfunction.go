@@ -12,7 +12,7 @@ const (
 	OpenFunctionRecordName                    = "openFunction"
 	OpenFunctionYamlEnv                       = "OPENFUNCTION_YAML"
 	OpenFunctionDefaultYamlFileTmpl           = "https://github.com/OpenFunction/OpenFunction/releases/download/%s%s/bundle.yaml"
-	OpenFunctionDefaultYamlFileTmplInRegionCN = "https://github.com/OpenFunction/OpenFunction/releases/download/%s%s/bundle.yaml"
+	OpenFunctionDefaultYamlFileTmplInRegionCN = "https://openfunction.sh1a.qingstor.com/openfunction/%s%s/bundle.yml"
 )
 
 type openFunction struct {

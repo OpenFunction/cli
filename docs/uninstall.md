@@ -13,7 +13,7 @@ This command will help you to uninstall OpenFunction and its dependencies.
 --ingress            For uninstalling Ingress Nginx.
 --keda               For uninstalling KEDA.
 --knative            For uninstalling Knative Serving (with Kourier as default gateway).
---region-cn          For users in China to uninstall dependent components.
+--region-cn          For users who have limited access to gcr.io or github.com.
 --shipwright         For uninstalling ShipWright.
 --sync               For uninstalling OpenFunction Sync Runtime (To be supported).
 --verbose            Show verbose information.
@@ -24,7 +24,7 @@ This command will help you to uninstall OpenFunction and its dependencies.
 
 ## Use Cases
 
-#### Uninstalling OpenFunction with a specify runtime
+### Uninstall a specified runtime of OpenFunction
 
 ```shell
 ofn uninstall --async
@@ -36,7 +36,7 @@ or
 ofn uninstall --knative
 ```
 
-#### Support users in China to uninstall
+### For users who have limited access to gcr.io or github.com to uninstall OpenFunction
 
 > This only makes sense when you have installed OpenFunction (and its dependencies) with the `--region-cn` parameter.
 
@@ -44,18 +44,23 @@ ofn uninstall --knative
 ofn uninstall --region-cn --all
 ```
 
-#### You can wait for the end of the installation process
+### You can wait for the uninstallation process
 
 > It will take time to wait for namespaces cleanup
 
 ```shell
-ofn uninstall  --all --wait
+ofn uninstall --all --wait
 ```
 
-#### Supports uninstallation of multiple versions of OpenFunction
+### Uninstall a specific version of OpenFunction (default is v0.4.0)
+
+The available versions are:
+- v0.3.1
+- v0.4.0
+- latest
 
 ```shell
-ofn uninstall --version latest
+ofn uninstall --version v0.4.0
 ```
 
 ## Inventory

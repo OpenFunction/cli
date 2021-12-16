@@ -16,6 +16,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/apimachinery/pkg/util/version"
 	k8s "k8s.io/client-go/kubernetes"
 )
 
@@ -32,18 +33,19 @@ const (
 	CertManagerNamespace    = "cert-manager"
 	IngressNginxNamespace   = "ingress-nginx"
 	OpenFunctionNamespace   = "openfunction"
+
+	BaseVersion = "v0.3.1"
 )
 
 type Operator struct {
-	os                     string
-	version                string
-	inRegionCN             bool
-	verbose                bool
-	executor               components.OperatorExecutor
-	downloadDaprClientFunc func(inRegionCN bool, verbose bool) error
-	timeout                time.Duration
-	Inventory              map[string]inventory.Interface
-	Records                *inventory.Record
+	os         string
+	version    string
+	inRegionCN bool
+	verbose    bool
+	executor   components.OperatorExecutor
+	timeout    time.Duration
+	Inventory  map[string]inventory.Interface
+	Records    *inventory.Record
 }
 
 func NewOperator(os string, version string, timeout time.Duration, inRegionCN bool, verbose bool) *Operator {
@@ -99,13 +101,44 @@ func (o *Operator) CheckKedaIsReady(ctx context.Context, cl *k8s.Clientset) erro
 }
 
 func (o *Operator) InstallKnativeServing(ctx context.Context, crdYamlFile string, coreYamlFile string) error {
+	// Ensure that the CRDs are ready before installing the CORE file
+	// See more at: https://github.com/knative/serving/issues/6571
+	applyCore := func(ctx context.Context) error {
+		ctx, done := context.WithCancel(ctx)
+		defer done()
+
+		t := time.NewTicker(5 * time.Second)
+		defer t.Stop()
+
+		cmd := fmt.Sprintf("apply -f %s", coreYamlFile)
+
+		for {
+			select {
+			case <-t.C:
+				if err := o.executor.KubectlExec(ctx, cmd, false); err != nil {
+					if strings.Contains(err.Error(), "no matches for kind") {
+						t.Reset(5 * time.Second)
+						continue
+					}
+					return err
+				}
+				return nil
+			case <-ctx.Done():
+				return errors.Wrap(
+					ctx.Err(),
+					"context marked done. stopping check loop",
+				)
+			}
+		}
+	}
+
 	var cmd string
 	cmd = fmt.Sprintf("apply -f %s", crdYamlFile)
 	if err := o.executor.KubectlExec(ctx, cmd, true); err != nil {
 		return err
 	}
-	cmd = fmt.Sprintf("apply -f %s", coreYamlFile)
-	return o.executor.KubectlExec(ctx, cmd, true)
+
+	return applyCore(ctx)
 }
 
 func (o *Operator) InstallKourier(ctx context.Context, cl *k8s.Clientset, yamlFile string) error {
@@ -433,5 +466,17 @@ func IsComponentExist(ctx context.Context, cl *k8s.Clientset, ns string, resourc
 			}
 			return false
 		}
+	}
+}
+
+func IsVersionValid(ofVersion *version.Version) (bool, error) {
+	base, err := version.ParseGeneric(BaseVersion)
+	if err != nil {
+		return false, err
+	}
+	if ofVersion.LessThan(base) {
+		return false, nil
+	} else {
+		return true, nil
 	}
 }

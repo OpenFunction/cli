@@ -13,7 +13,7 @@ const (
 	CertManagerVersionEnv                    = "CERT_MANAGER_VERSION"
 	CertManagerYamlEnv                       = "CERT_MANAGER_YAML"
 	CertManagerDefaultYamlFileTmpl           = "https://github.com/jetstack/cert-manager/releases/download/%s%s/cert-manager.yaml"
-	CertManagerDefaultYamlFileTmplInRegionCN = "https://github.com/kedacore/keda/releases/download/%s%s/keda-%s.yaml"
+	CertManagerDefaultYamlFileTmplInRegionCN = "https://openfunction.sh1a.qingstor.com/cert-manager/%s%s/cert-manager.yaml"
 )
 
 type certManager struct {
@@ -56,7 +56,7 @@ func (i *certManager) GetYamlFile(ver string) (map[string]string, error) {
 	} else {
 		cmVersion := fmt.Sprintf("%d.%d.%d", v.Major(), v.Minor(), v.Patch())
 		if i.regionCN {
-			yamls["MAIN"] = fmt.Sprintf(CertManagerDefaultYamlFileTmplInRegionCN, "v", cmVersion, cmVersion)
+			yamls["MAIN"] = fmt.Sprintf(CertManagerDefaultYamlFileTmplInRegionCN, "v", cmVersion)
 			return yamls, nil
 		}
 		yamls["MAIN"] = fmt.Sprintf(CertManagerDefaultYamlFileTmpl, "v", cmVersion)

@@ -14,7 +14,7 @@ const (
 	ServingDefaultDomainVersionEnv                    = "DEFAULT_DOMAIN_VERSION"
 	ServingDefaultDomainYamlEnv                       = "DEFAULT_DOMAIN_YAML"
 	ServingDefaultDomainDefaultYamlFileTmpl           = "https://github.com/knative/serving/releases/download/%s%s/serving-default-domain.yaml"
-	ServingDefaultDomainDefaultYamlFileTmplInRegionCN = "https://github.com/knative-sandbox/net-kourier/releases/download/%s%d.%d.%d/release.yaml"
+	ServingDefaultDomainDefaultYamlFileTmplInRegionCN = "https://openfunction.sh1a.qingstor.com/knative/serving/%s%s/serving-default-domain.yml"
 )
 
 type defaultDomain struct {
@@ -59,14 +59,14 @@ func (i *defaultDomain) GetYamlFile(ver string) (map[string]string, error) {
 		switch v.Major() {
 		case 0:
 			if i.regionCN {
-				yamls["MAIN"] = fmt.Sprintf(ServingDefaultDomainDefaultYamlFileTmplInRegionCN, "v", v.Major(), v.Minor(), v.Patch())
+				yamls["MAIN"] = fmt.Sprintf(ServingDefaultDomainDefaultYamlFileTmplInRegionCN, "v", ddVersion)
 				return yamls, nil
 			}
 			yamls["MAIN"] = fmt.Sprintf(ServingDefaultDomainDefaultYamlFileTmpl, "v", ddVersion)
 			return yamls, nil
 		case 1:
 			if i.regionCN {
-				yamls["MAIN"] = fmt.Sprintf(ServingDefaultDomainDefaultYamlFileTmplInRegionCN, "knative-v", v.Major(), v.Minor(), v.Patch())
+				yamls["MAIN"] = fmt.Sprintf(ServingDefaultDomainDefaultYamlFileTmplInRegionCN, "knative-v", ddVersion)
 				return yamls, nil
 			}
 			yamls["MAIN"] = fmt.Sprintf(ServingDefaultDomainDefaultYamlFileTmpl, "knative-v", ddVersion)

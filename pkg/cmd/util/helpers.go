@@ -43,12 +43,3 @@ func IgnoreNotFoundErr(err error) error {
 	}
 	return err
 }
-
-func IsInSlice(s string, target []string) bool {
-	for _, t := range target {
-		if t == s {
-			return true
-		}
-	}
-	return false
-}

@@ -13,7 +13,7 @@ const (
 	TektonPipelinesVersionEnv                    = "TEKTON_PIPELINES_VERSION"
 	TektonPipelinesYamlEnv                       = "TEKTON_PIPELINES_YAML"
 	TektonPipelinesDefaultYamlFileTmpl           = "https://storage.googleapis.com/tekton-releases/pipeline/previous/%s%s/release.yaml"
-	TektonPipelinesDefaultYamlFileTmplInRegionCN = "https://storage.googleapis.com/tekton-releases/pipeline/previous/%s%s/release.yaml"
+	TektonPipelinesDefaultYamlFileTmplInRegionCN = "https://openfunction.sh1a.qingstor.com/tekton/pipeline/%s%s/release.yml"
 )
 
 type tektonPipelines struct {
