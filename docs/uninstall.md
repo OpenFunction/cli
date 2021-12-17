@@ -44,7 +44,7 @@ ofn uninstall --knative
 ofn uninstall --region-cn --all
 ```
 
-### You can wait for the uninstallation process
+### Wait for the uninstallation to complete
 
 > It will take time to wait for namespaces cleanup
 
@@ -52,7 +52,9 @@ ofn uninstall --region-cn --all
 ofn uninstall --all --wait
 ```
 
-### Uninstall a specific version of OpenFunction (default is v0.4.0)
+### Uninstall a specific version of OpenFunction
+
+> Default to v0.4.0 if no version specified
 
 The available versions are:
 - v0.3.1
