@@ -24,7 +24,7 @@ This command will help you to install OpenFunction and its dependencies.
 
 ## Use Cases
 
-### Install OpenFunction with specified runtime
+### Install OpenFunction with a specific runtime
 
 ```shell
 ofn install --async
@@ -44,13 +44,15 @@ ofn install --region-cn --all
 
 > You'll need to add `--region-cn` to the uninstall cmd too if OpenFunction is installed with this flag.
 
-### Overwrite existing components in the cluster with default or specified versions
+### Overwrite installed components with default versions
 
 ```shell
 ofn install --upgrade --all
 ```
 
-### Install particular OpenFunction (default version is v0.4.0)
+### Install a specific version of OpenFunction
+
+> default to v0.4.0 if no version specified
 
 The available versions are:
 - v0.3.1
