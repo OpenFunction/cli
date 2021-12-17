@@ -13,6 +13,8 @@ import (
 	"syscall"
 	"time"
 
+	"k8s.io/apimachinery/pkg/util/version"
+
 	"github.com/OpenFunction/cli/pkg/client"
 	"github.com/OpenFunction/cli/pkg/cmd/util"
 	"github.com/OpenFunction/cli/pkg/components/common"
@@ -48,6 +50,7 @@ type Install struct {
 	DryRun              bool
 	WithUpgrade         bool
 	Timeout             time.Duration
+	openFunctionVersion *version.Version
 }
 
 func init() {
@@ -68,23 +71,25 @@ func NewCmdInstall(restClient util.Getter, ioStreams genericclioptions.IOStreams
 	i := NewInstall(ioStreams)
 
 	cmd := &cobra.Command{
-		Use:                   "install <args>...",
+		Use:                   "install [flags]",
 		DisableFlagsInUseLine: true,
 		Short:                 "Install OpenFunction and its dependencies.",
-		Long: `
-This command will help you to install OpenFunction and its dependencies.
+		Long:                  "This command will help you to install OpenFunction and its dependencies.",
+		Example: `
+# Install OpenFunction with all dependencies
+ofn install --all
 
-You can use ofn install --all to install all components.
+# Install OpenFunction with a specific runtime
+ofn install --async
 
-The dependencies to be installed for OpenFunction v0.3.1 are: Dapr, KEDA, Knative Serving, Shipwright, Tekton Pipelines.
+# For users who have limited access to gcr.io or github.com to install OpenFunction
+ofn install --region-cn --all
 
-The permitted parameters are: --async, --knative, --shipwright, --version, --verbose, --dry-run
+# Install a specific version of OpenFunction (default is v0.4.0)
+ofn install --all --version v0.3.1
 
-The dependencies to be installed for OpenFunction v0.4.0 are: Dapr, KEDA, Knative Serving, Shipwright, Tekton Pipelines, Cert Manager, Ingress Nginx.
-
-The permitted parameters are: --async, --knative, --shipwright, --cert-manager, --ingress, --version, --verbose, --dry-run
+# See more at: https://github.com/OpenFunction/cli/blob/main/docs/install.md
 `,
-		Example: "ofn install --all",
 		PreRunE: func(cmd *cobra.Command, args []string) (err error) {
 			_, cl, err = client.NewKubeConfigClient()
 			if err != nil {
@@ -108,7 +113,7 @@ The permitted parameters are: --async, --knative, --shipwright, --cert-manager, 
 	cmd.Flags().BoolVar(&i.WithAsyncRuntime, "async", false, "For installing OpenFunction Async Runtime (Dapr & Keda).")
 	cmd.Flags().BoolVar(&i.WithSyncRuntime, "sync", false, "For installing OpenFunction Sync Runtime (To be supported).")
 	cmd.Flags().BoolVar(&i.WithAll, "all", false, "For installing all dependencies.")
-	cmd.Flags().BoolVar(&i.RegionCN, "region-cn", false, "For users in China to speed up the download process of dependent components.")
+	cmd.Flags().BoolVar(&i.RegionCN, "region-cn", false, "For users who have limited access to gcr.io or github.com.")
 	cmd.Flags().BoolVar(&i.DryRun, "dry-run", false, "Used to prompt for the components and their versions to be installed by the current command.")
 	cmd.Flags().BoolVar(&i.WithUpgrade, "upgrade", false, "Upgrade components to target version while installing.")
 	cmd.Flags().StringVar(&i.OpenFunctionVersion, "version", "v0.4.0", "Used to specify the version of OpenFunction to be installed. The permitted versions are: v0.3.1, v0.4.0, latest.")
@@ -127,14 +132,28 @@ The permitted parameters are: --async, --knative, --shipwright, --cert-manager, 
 func (i *Install) ValidateArgs(cmd *cobra.Command, args []string) error {
 	ti := util.NewTaskInformer("")
 
-	if !util.IsInSlice(i.OpenFunctionVersion, availableVersions) {
-		errMsg := fmt.Sprintf(
-			"version %s is not in the list of available versions: %v",
+	v, err := version.ParseGeneric(i.OpenFunctionVersion)
+	if err != nil {
+		return errors.New(ti.TaskFail(fmt.Sprintf(
+			"the specified version %s is not a valid version",
 			i.OpenFunctionVersion,
-			strings.Join(availableVersions[:], ", "),
-		)
-		return errors.New(ti.TaskFail(errMsg))
+		)))
 	}
+
+	if valid, err := common.IsVersionValid(v); err != nil {
+		return errors.New(ti.TaskFail(err.Error()))
+	} else {
+		if !valid {
+			return errors.New(ti.TaskFail(fmt.Sprintf(
+				"the specified version %s is lower than the supported version %s",
+				i.OpenFunctionVersion,
+				common.BaseVersion,
+			)))
+		}
+	}
+
+	i.openFunctionVersion = v
+
 	return nil
 }
 
@@ -219,7 +238,7 @@ func (i *Install) RunInstall(cl *k8s.Clientset, cmd *cobra.Command) error {
 	}
 	defer operator.RecordInventory(ctx)
 
-	c := make(chan os.Signal)
+	c := make(chan os.Signal, 1)
 	signal.Notify(c, os.Interrupt, syscall.SIGTERM)
 	go func() {
 		<-c
@@ -231,8 +250,7 @@ func (i *Install) RunInstall(cl *k8s.Clientset, cmd *cobra.Command) error {
 	start := time.Now()
 
 	if i.WithDapr {
-		// If the Dapr component already exists in the cluster
-		// and the `--upgrade` parameter is not used, skip this step.
+		// If Dapr already exists and --upgrade is not specified, skip this step.
 		if !inventoryExist[inventory.DaprName] || i.WithUpgrade {
 			grp1.Go(func() error {
 				return i.installDapr(g1ctx, operator)
@@ -243,8 +261,7 @@ func (i *Install) RunInstall(cl *k8s.Clientset, cmd *cobra.Command) error {
 	}
 
 	if i.WithKeda {
-		// If the Keda component already exists in the cluster
-		// and the `--upgrade` parameter is not used, skip this step.
+		// If Keda already exists and --upgrade is not specified, skip this step.
 		if !inventoryExist[inventory.KedaName] || i.WithUpgrade {
 			grp1.Go(func() error {
 				return i.installKeda(g1ctx, cl, operator)
@@ -255,8 +272,7 @@ func (i *Install) RunInstall(cl *k8s.Clientset, cmd *cobra.Command) error {
 	}
 
 	if i.WithKnative {
-		// If the Knative Serving component already exists in the cluster
-		// and the `--upgrade` parameter is not used, skip this step.
+		// If Knative Serving already exists and --upgrade is not specified, skip this step.
 		if !inventoryExist[inventory.KnativeServingName] || i.WithUpgrade {
 			grp1.Go(func() error {
 				return i.installKnativeServing(g1ctx, cl, operator)
@@ -267,16 +283,13 @@ func (i *Install) RunInstall(cl *k8s.Clientset, cmd *cobra.Command) error {
 	}
 
 	if i.WithShipWright {
-		// We must install Shipwright(and Tekton Pipelines)
-		// with or without the `--upgrade` parameter.
 		grp1.Go(func() error {
 			return i.installShipwright(g1ctx, cl, operator)
 		})
 	}
 
 	if i.WithCertManager {
-		// If the Cert Manager component already exists in the cluster
-		// and the `--upgrade` parameter is not used, skip this step.
+		// If Cert Manager already exists and --upgrade is not specified, skip this step.
 		if !inventoryExist[inventory.CertManagerName] || i.WithUpgrade {
 			grp1.Go(func() error {
 				return i.installCertManager(g1ctx, cl, operator)
@@ -287,8 +300,7 @@ func (i *Install) RunInstall(cl *k8s.Clientset, cmd *cobra.Command) error {
 	}
 
 	if i.WithIngress {
-		// If the Ingress Nginx component already exists in the cluster
-		// and the `--upgrade` parameter is not used, skip this step.
+		// If Ingress Nginx already exists and --upgrade is not specified, skip this step.
 		if !inventoryExist[inventory.IngressName] || i.WithUpgrade {
 			grp1.Go(func() error {
 				return i.installIngress(g1ctx, cl, operator)
@@ -342,13 +354,14 @@ func (i *Install) mergeConditions() {
 	//if i.WithSyncRuntime {
 	//}
 
-	if i.OpenFunctionVersion == "v0.3.1" {
+	if i.openFunctionVersion.Major() == 0 && i.openFunctionVersion.Minor() == 3 {
 		i.WithIngress = false
 		i.WithCertManager = false
 	}
 
-	if i.OpenFunctionVersion == "v0.4.0" {
+	if i.openFunctionVersion.Major() == 0 && i.openFunctionVersion.Minor() == 4 {
 		i.WithIngress = false
+		i.WithCertManager = true
 	}
 }
 

@@ -139,6 +139,12 @@ func (e *Executor) GetInventoryRecord(ctx context.Context) (*inventory.Record, e
 		return nil, err
 	}
 
+	if err := os.Mkdir(filepath.Join(dirname, components.OpenFunctionDir), os.ModePerm); err != nil {
+		if !strings.Contains(err.Error(), "file exists") {
+			return nil, err
+		}
+	}
+
 	filePath := filepath.Join(dirname, components.OpenFunctionDir, components.RecordFileName)
 
 	if _, err := os.Stat(filePath); errors.Is(err, os.ErrNotExist) {

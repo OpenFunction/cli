@@ -13,18 +13,18 @@ This command will help you to install OpenFunction and its dependencies.
 --ingress            For installing Ingress Nginx.
 --keda               For installing Keda.
 --knative            For installing Knative Serving (with Kourier as default gateway).
---region-cn          For users in China to speed up the download process of dependent components.
+--region-cn          For users who have limited access to gcr.io or github.com.
 --shipwright         For installing ShipWright.
 --sync               For installing OpenFunction Sync Runtime (To be supported).
 --upgrade            Upgrade components to target version while installing.
 --verbose            Show verbose information.
---version string     Used to specify the version of OpenFunction to be installed. The permitted versions are: v0.3.1, v0.4.0, latest. (default "v0.4.0")
+--version string     Used to specify the version of OpenFunction to be installed. (default "v0.4.0")
 --timeout duration   Set timeout time. Default is 5 minutes. (default 5m0s)
 ```
 
 ## Use Cases
 
-### Install OpenFunction with a specified runtime
+### Install OpenFunction with specified runtime
 
 ```shell
 ofn install --async
@@ -50,10 +50,15 @@ ofn install --region-cn --all
 ofn install --upgrade --all
 ```
 
-### Install a specified version of OpenFunction
+### Install particular OpenFunction (default version is v0.4.0)
+
+The available versions are:
+- v0.3.1
+- v0.4.0
+- latest
 
 ```shell
-ofn install --version latest
+ofn install --version v0.4.0
 ```
 
 ## The default compatibility matrix

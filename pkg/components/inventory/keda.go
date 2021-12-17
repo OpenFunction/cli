@@ -13,7 +13,7 @@ const (
 	KedaVersionEnv                    = "KEDA_VERSION"
 	KedaYamlEnv                       = "KEDA_YAML"
 	KedaDefaultYamlFileTmpl           = "https://github.com/kedacore/keda/releases/download/%s%s/keda-%s.yaml"
-	KedaDefaultYamlFileTmplInRegionCN = "https://github.com/kedacore/keda/releases/download/%s%s/keda-%s.yaml"
+	KedaDefaultYamlFileTmplInRegionCN = "https://openfunction.sh1a.qingstor.com/keda/%s%s/keda-%s.yaml"
 )
 
 type keda struct {

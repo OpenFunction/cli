@@ -14,8 +14,8 @@ const (
 	KnativeServingVersionEnv                    = "KNATIVE_SERVING_VERSION"
 	KnativeServingCrdYamlEnv                    = "KNATIVE_SERVING_CRD_YAML"
 	KnativeServingCoreYamlEnv                   = "KNATIVE_SERVING_CORE_YAML"
-	KnativeServingDefaultYamlFileTmpl           = "https://github.com/knative/serving/releases/download/%s%d.%d.%d/serving-%s.yaml"
-	KnativeServingDefaultYamlFileTmplInRegionCN = "https://github.com/knative/serving/releases/download/%s%d.%d.%d/serving-%s.yaml"
+	KnativeServingDefaultYamlFileTmpl           = "https://github.com/knative/serving/releases/download/%s%s/serving-%s.yaml"
+	KnativeServingDefaultYamlFileTmplInRegionCN = "https://openfunction.sh1a.qingstor.com/knative/serving/%s%s/serving-%s.yml"
 )
 
 type knativeServing struct {
@@ -59,24 +59,25 @@ func (i *knativeServing) GetYamlFile(knVersion string) (map[string]string, error
 	if v, err := version.ParseGeneric(knVersion); err != nil {
 		return nil, err
 	} else {
+		knativeVersion := fmt.Sprintf("%d.%d.%d", v.Major(), v.Minor(), v.Patch())
 		switch v.Major() {
 		case 0:
 			if i.regionCN {
-				yamls["CRD"] = fmt.Sprintf(KnativeServingDefaultYamlFileTmplInRegionCN, "v", v.Major(), v.Minor(), v.Patch(), "crds")
-				yamls["CORE"] = fmt.Sprintf(KnativeServingDefaultYamlFileTmplInRegionCN, "v", v.Major(), v.Minor(), v.Patch(), "core")
+				yamls["CRD"] = fmt.Sprintf(KnativeServingDefaultYamlFileTmplInRegionCN, "v", knativeVersion, "crds")
+				yamls["CORE"] = fmt.Sprintf(KnativeServingDefaultYamlFileTmplInRegionCN, "v", knativeVersion, "core")
 				return yamls, nil
 			}
-			yamls["CRD"] = fmt.Sprintf(KnativeServingDefaultYamlFileTmpl, "v", v.Major(), v.Minor(), v.Patch(), "crds")
-			yamls["CORE"] = fmt.Sprintf(KnativeServingDefaultYamlFileTmpl, "v", v.Major(), v.Minor(), v.Patch(), "core")
+			yamls["CRD"] = fmt.Sprintf(KnativeServingDefaultYamlFileTmpl, "v", knativeVersion, "crds")
+			yamls["CORE"] = fmt.Sprintf(KnativeServingDefaultYamlFileTmpl, "v", knativeVersion, "core")
 			return yamls, nil
 		case 1:
 			if i.regionCN {
-				yamls["CRD"] = fmt.Sprintf(KnativeServingDefaultYamlFileTmplInRegionCN, "knative-v", v.Major(), v.Minor(), v.Patch(), "crds")
-				yamls["CORE"] = fmt.Sprintf(KnativeServingDefaultYamlFileTmplInRegionCN, "knative-v", v.Major(), v.Minor(), v.Patch(), "core")
+				yamls["CRD"] = fmt.Sprintf(KnativeServingDefaultYamlFileTmplInRegionCN, "knative-v", knativeVersion, "crds")
+				yamls["CORE"] = fmt.Sprintf(KnativeServingDefaultYamlFileTmplInRegionCN, "knative-v", knativeVersion, "core")
 				return yamls, nil
 			}
-			yamls["CRD"] = fmt.Sprintf(KnativeServingDefaultYamlFileTmpl, "knative-v", v.Major(), v.Minor(), v.Patch(), "crds")
-			yamls["CORE"] = fmt.Sprintf(KnativeServingDefaultYamlFileTmpl, "knative-v", v.Major(), v.Minor(), v.Patch(), "core")
+			yamls["CRD"] = fmt.Sprintf(KnativeServingDefaultYamlFileTmpl, "knative-v", knativeVersion, "crds")
+			yamls["CORE"] = fmt.Sprintf(KnativeServingDefaultYamlFileTmpl, "knative-v", knativeVersion, "core")
 			return yamls, nil
 		default:
 			return nil, errors.New("wrong format")

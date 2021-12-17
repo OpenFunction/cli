@@ -13,7 +13,7 @@ const (
 	IngressVersionEnv                    = "INGRESS_NGINX_VERSION"
 	IngressYamlEnv                       = "INGRESS_NGINX_YAML"
 	IngressDefaultYamlFileTmpl           = "https://raw.githubusercontent.com/kubernetes/ingress-nginx/controller-%s%s/deploy/static/provider/cloud/deploy.yaml"
-	IngressDefaultYamlFileTmplInRegionCN = "https://raw.githubusercontent.com/kubernetes/ingress-nginx/controller-%s%s/deploy/static/provider/cloud/deploy.yaml"
+	IngressDefaultYamlFileTmplInRegionCN = "https://openfunction.sh1a.qingstor.com/ingress-nginx/%s%s/deploy.yml"
 )
 
 type ingress struct {

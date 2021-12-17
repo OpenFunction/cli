@@ -11,6 +11,8 @@ import (
 	"syscall"
 	"time"
 
+	"k8s.io/apimachinery/pkg/util/version"
+
 	"github.com/OpenFunction/cli/pkg/client"
 	"github.com/OpenFunction/cli/pkg/cmd/util"
 	"github.com/OpenFunction/cli/pkg/components/common"
@@ -56,23 +58,28 @@ func NewCmdUninstall(restClient util.Getter, ioStreams genericclioptions.IOStrea
 	i := NewUninstall(ioStreams)
 
 	cmd := &cobra.Command{
-		Use:                   "uninstall <args>...",
+		Use:                   "uninstall [flags]",
 		DisableFlagsInUseLine: true,
 		Short:                 "Uninstall OpenFunction and its dependencies.",
-		Long: `
-This command will help you to uninstall OpenFunction and its dependencies.
+		Long:                  "This command will help you to uninstall OpenFunction and its dependencies.",
+		Example: `
+# Uninstall OpenFunction with all dependencies
+ofn uninstall --all
 
-You can use ofn uninstall --all to uninstall all components.
+# Uninstall a specified runtime of OpenFunction
+ofn uninstall --async
 
-The dependencies to be uninstalled for OpenFunction v0.3.1 are: Dapr, KEDA, Knative Serving, Shipwright, Tekton Pipelines.
+# For users who have limited access to gcr.io or github.com to uninstall OpenFunction
+ofn uninstall --region-cn --all
 
-The permitted parameters are: --async, --knative, --shipwright, --version, --verbose, --dry-run
+# Uninstall OpenFunction and wait for the uninstallation to complete (default timeout is 300s/5m)
+ofn uninstall --all --wait
 
-The dependencies to be uninstalled for OpenFunction v0.4.0 are: Dapr, KEDA, Knative Serving, Shipwright, Tekton Pipelines, Cert Manager, Ingress Nginx.
+# Uninstall a specific version of OpenFunction (default is v0.4.0)
+ofn uninstall --all --version v0.4.0
 
-The permitted parameters are: --async, --knative, --shipwright, --cert-manager, --ingress, --version, --verbose, --dry-run
+# See more at: https://github.com/OpenFunction/cli/blob/main/docs/uninstall.md
 `,
-		Example: "ofn uninstall --all",
 		PreRunE: func(cmd *cobra.Command, args []string) (err error) {
 			_, cl, err = client.NewKubeConfigClient()
 			if err != nil {
@@ -96,7 +103,7 @@ The permitted parameters are: --async, --knative, --shipwright, --cert-manager, 
 	cmd.Flags().BoolVar(&i.WithAsyncRuntime, "async", false, "For uninstalling OpenFunction Async Runtime (Dapr & Keda).")
 	cmd.Flags().BoolVar(&i.WithSyncRuntime, "sync", false, "For uninstalling OpenFunction Sync Runtime (To be supported).")
 	cmd.Flags().BoolVar(&i.WithAll, "all", false, "For uninstalling all dependencies.")
-	cmd.Flags().BoolVar(&i.RegionCN, "region-cn", false, "For users in China to uninstall dependent components.")
+	cmd.Flags().BoolVar(&i.RegionCN, "region-cn", false, "For users who have limited access to gcr.io or github.com.")
 	cmd.Flags().BoolVar(&i.DryRun, "dry-run", false, "Used to prompt for the components and their versions to be uninstalled by the current command.")
 	cmd.Flags().BoolVar(&i.WaitForCleared, "wait", false, "Awaiting the results of the uninstallation.")
 	cmd.Flags().StringVar(&i.OpenFunctionVersion, "version", "v0.4.0", "Used to specify the version of OpenFunction to be uninstalled.")
@@ -115,14 +122,26 @@ The permitted parameters are: --async, --knative, --shipwright, --cert-manager, 
 func (i *Uninstall) ValidateArgs(cmd *cobra.Command, args []string) error {
 	ti := util.NewTaskInformer("")
 
-	if !util.IsInSlice(i.OpenFunctionVersion, availableVersions) {
-		errMsg := fmt.Sprintf(
-			"version %s is not in the list of available versions: %v",
+	v, err := version.ParseGeneric(i.OpenFunctionVersion)
+	if err != nil {
+		return errors.New(ti.TaskFail(fmt.Sprintf(
+			"the specified version %s is not a valid version",
 			i.OpenFunctionVersion,
-			strings.Join(availableVersions[:], ", "),
-		)
-		return errors.New(ti.TaskFail(errMsg))
+		)))
 	}
+
+	if valid, err := common.IsVersionValid(v); err != nil {
+		return errors.New(ti.TaskFail(err.Error()))
+	} else {
+		if !valid {
+			return errors.New(ti.TaskFail(fmt.Sprintf(
+				"the specified version %s is lower than the supported version %s",
+				i.OpenFunctionVersion,
+				common.BaseVersion,
+			)))
+		}
+	}
+
 	return nil
 }
 
@@ -197,7 +216,7 @@ func (i *Uninstall) RunUninstall(cl *k8s.Clientset, cmd *cobra.Command) error {
 	}
 	defer operator.RecordInventory(ctx)
 
-	c := make(chan os.Signal)
+	c := make(chan os.Signal, 1)
 	signal.Notify(c, os.Interrupt, syscall.SIGTERM)
 	go func() {
 		<-c

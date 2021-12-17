@@ -13,8 +13,8 @@ const (
 	KourierRecordName                    = "kourier"
 	KourierVersionEnv                    = "KOURIER_VERSION"
 	KourierYamlEnv                       = "KOURIER_YAML"
-	KourierDefaultYamlFileTmpl           = "https://github.com/knative-sandbox/net-kourier/releases/download/%s%d.%d.%d/kourier.yaml"
-	KourierDefaultYamlFileTmplInRegionCN = "https://github.com/knative-sandbox/net-kourier/releases/download/%s%d.%d.%d/release.yaml"
+	KourierDefaultYamlFileTmpl           = "https://github.com/knative-sandbox/net-kourier/releases/download/%s%s/kourier.yaml"
+	KourierDefaultYamlFileTmplInRegionCN = "https://openfunction.sh1a.qingstor.com/knative/net-kourier/%s%s/kourier.yml"
 )
 
 type kourier struct {
@@ -55,20 +55,21 @@ func (i *kourier) GetYamlFile(ver string) (map[string]string, error) {
 	if v, err := version.ParseGeneric(ver); err != nil {
 		return nil, err
 	} else {
+		kourierVersion := fmt.Sprintf("%d.%d.%d", v.Major(), v.Minor(), v.Patch())
 		switch v.Major() {
 		case 0:
 			if i.regionCN {
-				yamls["MAIN"] = fmt.Sprintf(KourierDefaultYamlFileTmplInRegionCN, "v", v.Major(), v.Minor(), v.Patch())
+				yamls["MAIN"] = fmt.Sprintf(KourierDefaultYamlFileTmplInRegionCN, "v", kourierVersion)
 				return yamls, nil
 			}
-			yamls["MAIN"] = fmt.Sprintf(KourierDefaultYamlFileTmpl, "v", v.Major(), v.Minor(), v.Patch())
+			yamls["MAIN"] = fmt.Sprintf(KourierDefaultYamlFileTmpl, "v", kourierVersion)
 			return yamls, nil
 		case 1:
 			if i.regionCN {
-				yamls["MAIN"] = fmt.Sprintf(KourierDefaultYamlFileTmpl, "knative-v", v.Major(), v.Minor(), v.Patch())
+				yamls["MAIN"] = fmt.Sprintf(KourierDefaultYamlFileTmplInRegionCN, "knative-v", kourierVersion)
 				return yamls, nil
 			}
-			yamls["MAIN"] = fmt.Sprintf(KourierDefaultYamlFileTmpl, "knative-v", v.Major(), v.Minor(), v.Patch())
+			yamls["MAIN"] = fmt.Sprintf(KourierDefaultYamlFileTmpl, "knative-v", kourierVersion)
 			return yamls, nil
 		default:
 			return nil, errors.New("wrong format")
