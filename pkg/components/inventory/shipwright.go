@@ -13,7 +13,7 @@ const (
 	ShipwrightVersionEnv                    = "SHIPWRIGHT_VERSION"
 	ShipwrightYamlEnv                       = "SHIPWRIGHT_YAML"
 	ShipwrightDefaultYamlFileTmpl           = "https://openfunction.sh1a.qingstor.com/shipwright/%s%s/release.yaml"
-	ShipwrightDefaultYamlFileTmplInRegionCN = "https://openfunction.sh1a.qingstor.com/shipwright/%s%s/release.yaml"
+	ShipwrightDefaultYamlFileTmplInRegionCN = "https://openfunction.sh1a.qingstor.com/shipwright/zh-%s%s/release.yaml"
 )
 
 type shipwright struct {
