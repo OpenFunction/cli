@@ -20,4 +20,7 @@ type OperatorExecutor interface {
 	KubectlExec(ctx context.Context, cmd string, wait bool) error
 	RecordInventory(ctx context.Context, inventoryMap map[string]string) error
 	GetInventoryRecord(ctx context.Context) (*inventory.Record, error)
+	DownloadKind(ctx context.Context) error
+	GetNodeIP(ctx context.Context) (string, error)
+	CurlOpenFunction(ctx context.Context, endPoint string) error
 }

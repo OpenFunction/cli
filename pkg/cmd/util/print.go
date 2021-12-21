@@ -212,3 +212,10 @@ func (ti *TaskInformer) TipsOnUsingKnative() {
 		"  --type merge --patch '{\"data\":{\"1.2.3.4.sslip.io\":\"\"}}'")
 	fmt.Println()
 }
+
+func (ti *TaskInformer) TipsOnOpenfunctionDemo(Endpoint string) {
+	fmt.Println(YellowItalic("Now we have configured the appropriate parameters for you, "+
+		"You can use this address to access related functions : \n"), Endpoint)
+	fmt.Println()
+	fmt.Println(YellowItalic("We now use the curl command to access the address. The following information was returned:"))
+}

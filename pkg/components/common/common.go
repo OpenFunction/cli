@@ -48,6 +48,14 @@ type Operator struct {
 	Records    *inventory.Record
 }
 
+type PatchExternalIP struct {
+	Spec Spec `json:"spec"`
+}
+type Spec struct {
+	MyType      string   `json:"type"`
+	ExternalIPs []string `json:"externalIPs"`
+}
+
 func NewOperator(os string, version string, timeout time.Duration, inRegionCN bool, verbose bool) *Operator {
 	op := &Operator{
 		os:         os,
@@ -313,6 +321,110 @@ func (o *Operator) Uninstall(
 		return checkNamespaceIsCleared(ctx, cl, namespace)
 	}
 	return nil
+}
+
+func (o *Operator) DownloadKind(ctx context.Context) error {
+	return o.executor.DownloadKind(ctx)
+}
+
+func (o *Operator) CreateKindCluster(ctx context.Context) error {
+	cmd := "kind create cluster --name openfunction"
+	if _, _, err := o.executor.Exec(cmd); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (o *Operator) DeleteKind(ctx context.Context) error {
+	cmd := "kind delete cluster --name openfunction"
+	if _, _, err := o.executor.Exec(cmd); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (o *Operator) RunOpenFunction(ctx context.Context, demoYamlFile string) error {
+	cmd := fmt.Sprintf("apply -f %s", demoYamlFile)
+	return o.executor.KubectlExec(ctx, cmd, false)
+}
+
+func (o *Operator) GetNodeIP(ctx context.Context) (string, error) {
+	return o.executor.GetNodeIP(ctx)
+}
+
+func (o *Operator) PatchExternalIP(ctx context.Context, cl *k8s.Clientset, ip string) error {
+
+	patchData := PatchExternalIP{
+		Spec: Spec{
+			MyType:      "LoadBalancer",
+			ExternalIPs: []string{ip},
+		},
+	}
+
+	patchDataBytes, err := json.Marshal(patchData)
+	if err != nil {
+		return err
+	}
+
+	if _, err := cl.CoreV1().Services(KourierNamespace).Patch(
+		ctx,
+		"kourier",
+		types.MergePatchType,
+		patchDataBytes,
+		metav1.PatchOptions{},
+	); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (o *Operator) PatchMagicDNS(ctx context.Context, cl *k8s.Clientset, ip string) error {
+
+	patchData := map[string]map[string]string{
+		"data": {fmt.Sprintf("%s.sslip.io", ip): ""},
+	}
+	patchDataBytes, err := json.Marshal(patchData)
+	if err != nil {
+		return err
+	}
+
+	if _, err := cl.CoreV1().ConfigMaps(KnativeServingNamespace).Patch(
+		ctx,
+		"config-domain",
+		types.MergePatchType,
+		patchDataBytes,
+		metav1.PatchOptions{},
+	); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (o *Operator) PrintEndpoint(ctx context.Context) (string, error) {
+	statusCMD := "kubectl get ksvc -l openfunction.io/serving=$(kubectl get functions function-sample-serving-only -o jsonpath='{.status.serving.resourceRef}') -o jsonpath='{.items[0].status.conditions[2].status}'"
+	for {
+		status, _, err := o.executor.Exec(statusCMD)
+		if err != nil {
+			return "", err
+		}
+		if status == "True" {
+			break
+		} else {
+			time.Sleep(2 * time.Second)
+		}
+
+	}
+	EndPointCMD := "kubectl get ksvc -l openfunction.io/serving=$(kubectl get functions function-sample-serving-only -o jsonpath='{.status.serving.resourceRef}') -o jsonpath='{.items[0].status.url}'"
+	EndPoint, _, err := o.executor.Exec(EndPointCMD)
+	if err != nil {
+		return "", err
+	}
+	return EndPoint, nil
+}
+
+func (o *Operator) CurlOpenFunction(ctx context.Context, endPoint string) error {
+	return o.executor.CurlOpenFunction(ctx, endPoint)
 }
 
 func checkDeploymentIsReady(
