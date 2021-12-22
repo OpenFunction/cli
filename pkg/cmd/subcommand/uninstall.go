@@ -11,8 +11,6 @@ import (
 	"syscall"
 	"time"
 
-	"k8s.io/apimachinery/pkg/util/version"
-
 	"github.com/OpenFunction/cli/pkg/client"
 	"github.com/OpenFunction/cli/pkg/cmd/util"
 	"github.com/OpenFunction/cli/pkg/components/common"
@@ -20,6 +18,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 	"golang.org/x/sync/errgroup"
+	"k8s.io/apimachinery/pkg/util/version"
 	"k8s.io/cli-runtime/pkg/genericclioptions"
 	k8s "k8s.io/client-go/kubernetes"
 )
@@ -121,6 +120,10 @@ ofn uninstall --all --version v0.4.0
 
 func (i *Uninstall) ValidateArgs(cmd *cobra.Command, args []string) error {
 	ti := util.NewTaskInformer("")
+
+	if i.OpenFunctionVersion == common.LatestVersion {
+		return nil
+	}
 
 	v, err := version.ParseGeneric(i.OpenFunctionVersion)
 	if err != nil {
@@ -244,18 +247,6 @@ func (i *Uninstall) RunUninstall(cl *k8s.Clientset, cmd *cobra.Command) error {
 	}
 
 	if i.WithKnative {
-		if operator.Records.DefaultDomain != "" {
-			grp.Go(func() error {
-				return i.uninstallServingDefaultDomain(gctx, cl, operator)
-			})
-		}
-
-		if operator.Records.Kourier != "" {
-			grp.Go(func() error {
-				return i.uninstallKourier(gctx, cl, operator)
-			})
-		}
-
 		if operator.Records.KnativeServing != "" {
 			grp.Go(func() error {
 				return i.uninstallKnativeServing(gctx, cl, operator)
@@ -377,6 +368,38 @@ func (i *Uninstall) uninstallKnativeServing(ctx context.Context, cl *k8s.Clients
 
 	ti := util.NewTaskInformer("KNATIVE")
 
+	if operator.Records.DefaultDomain != "" {
+		fmt.Fprintln(w, ti.TaskInfo("Uninstalling Serving Default Domain..."))
+
+		yamls, err := operator.Inventory[inventory.ServingDefaultDomainName].GetYamlFile(operator.Records.DefaultDomain)
+		if err != nil {
+			return errors.Wrap(err, ti.TaskFailWithTitle("Failed to get yaml file"))
+		}
+
+		if err := operator.Uninstall(ctx, cl, yamls["MAIN"], common.KnativeServingNamespace, false, i.WaitForCleared); err != nil {
+			return errors.Wrap(err, ti.TaskFailWithTitle("Failed to uninstall Serving Default Domain"))
+		}
+
+		// Reset version to null
+		operator.Records.DefaultDomain = ""
+	}
+
+	if operator.Records.Kourier != "" {
+		fmt.Fprintln(w, ti.TaskInfo("Uninstalling Kourier..."))
+
+		yamls, err := operator.Inventory[inventory.KourierName].GetYamlFile(operator.Records.Kourier)
+		if err != nil {
+			return errors.Wrap(err, ti.TaskFailWithTitle("Failed to get yaml file"))
+		}
+
+		if err := operator.Uninstall(ctx, cl, yamls["MAIN"], common.KedaNamespace, false, i.WaitForCleared); err != nil {
+			return errors.Wrap(err, ti.TaskFailWithTitle("Failed to uninstall Kourier"))
+		}
+
+		// Reset version to null
+		operator.Records.Kourier = ""
+	}
+
 	fmt.Fprintln(w, ti.TaskInfo("Uninstalling Knative Serving..."))
 
 	yamls, err := operator.Inventory[inventory.KnativeServingName].GetYamlFile(operator.Records.KnativeServing)
@@ -390,54 +413,6 @@ func (i *Uninstall) uninstallKnativeServing(ctx context.Context, cl *k8s.Clients
 
 	// Reset version to null
 	operator.Records.KnativeServing = ""
-
-	fmt.Fprintln(w, ti.TaskSuccess())
-	return nil
-}
-
-func (i *Uninstall) uninstallServingDefaultDomain(ctx context.Context, cl *k8s.Clientset, operator *common.Operator) error {
-	ctx, done := context.WithCancel(ctx)
-	defer done()
-
-	ti := util.NewTaskInformer("KNATIVE")
-
-	fmt.Fprintln(w, ti.TaskInfo("Uninstalling Serving Default Domain..."))
-
-	yamls, err := operator.Inventory[inventory.ServingDefaultDomainName].GetYamlFile(operator.Records.DefaultDomain)
-	if err != nil {
-		return errors.Wrap(err, ti.TaskFailWithTitle("Failed to get yaml file"))
-	}
-
-	if err := operator.Uninstall(ctx, cl, yamls["MAIN"], common.KnativeServingNamespace, false, i.WaitForCleared); err != nil {
-		return errors.Wrap(err, ti.TaskFailWithTitle("Failed to uninstall Serving Default Domain"))
-	}
-
-	// Reset version to null
-	operator.Records.DefaultDomain = ""
-
-	fmt.Fprintln(w, ti.TaskSuccess())
-	return nil
-}
-
-func (i *Uninstall) uninstallKourier(ctx context.Context, cl *k8s.Clientset, operator *common.Operator) error {
-	ctx, done := context.WithCancel(ctx)
-	defer done()
-
-	ti := util.NewTaskInformer("KOURIER")
-
-	fmt.Fprintln(w, ti.TaskInfo("Uninstalling Kourier..."))
-
-	yamls, err := operator.Inventory[inventory.KourierName].GetYamlFile(operator.Records.Kourier)
-	if err != nil {
-		return errors.Wrap(err, ti.TaskFailWithTitle("Failed to get yaml file"))
-	}
-
-	if err := operator.Uninstall(ctx, cl, yamls["MAIN"], common.KedaNamespace, false, i.WaitForCleared); err != nil {
-		return errors.Wrap(err, ti.TaskFailWithTitle("Failed to uninstall Kourier"))
-	}
-
-	// Reset version to null
-	operator.Records.Kourier = ""
 
 	fmt.Fprintln(w, ti.TaskSuccess())
 	return nil

@@ -126,7 +126,7 @@ func GetInventory(
 		}
 	}
 
-	if withCertManager && openFunctionVersion != "v0.3.1" {
+	if withCertManager {
 		if iv, err := NewCertManager(serverVersion, regionCN); err != nil {
 			return nil, err
 		} else {
@@ -134,7 +134,7 @@ func GetInventory(
 		}
 	}
 
-	if withIngress && openFunctionVersion == "latest" {
+	if withIngress {
 		if iv, err := NewIngressNginx(serverVersion, regionCN); err != nil {
 			return nil, err
 		} else {

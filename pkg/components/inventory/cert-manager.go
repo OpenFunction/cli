@@ -9,7 +9,7 @@ import (
 
 const (
 	CertManagerName                          = "CertManager"
-	CertManagerRecordName                    = "CertManager"
+	CertManagerRecordName                    = "certManager"
 	CertManagerVersionEnv                    = "CERT_MANAGER_VERSION"
 	CertManagerYamlEnv                       = "CERT_MANAGER_YAML"
 	CertManagerDefaultYamlFileTmpl           = "https://github.com/jetstack/cert-manager/releases/download/%s%s/cert-manager.yaml"
