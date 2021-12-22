@@ -18,20 +18,7 @@ The main commands supported by the CLI are:
 
 ## Getting started
 
-#### Build OpenFunction CLI
-
-You can use `make build` to build the OpenFunction CLI —— `ofn`.
-When the command is executed, you can find the artifact in the `. /dist` directory.
-Move it to the appropriate path in the `PATH` so that you can use it in your environment.
-
-```shell
-~# make build
-go fmt ./...
-/opt/openfunction/fn-cli/bin/goimports -w cmd/ pkg/ testdata/
-go vet ./...
-CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build  -ldflags "-s -w -X 'main.goversion=go version go1.16.7 linux/amd64'" \
--o ./dist/fn_linux_amd64 cmd/main.go;
-```
+Visit [ofn release](https://github.com/OpenFunction/cli/releases/) to select the `ofn` cli to deploy to your cluster.
 
 ### Use ofn to deploy OpenFunction
 
@@ -135,3 +122,19 @@ Enter 'y' to continue and 'n' to abort:
 🚀 Completed in 1m21.683329262s.
 ```
 
+### Build OpenFunction CLI
+
+You can also use `make build` to build the OpenFunction CLI —— `ofn`.
+When the command is executed, you can find the artifact in the `. /dist` directory.
+Move it to the appropriate path in the `PATH` so that you can use it in your environment.
+
+```shell
+~# make build
+go fmt ./...
+/opt/openfunction/fn-cli/bin/goimports -w cmd/ pkg/ testdata/
+go vet ./...
+CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build  -ldflags "-s -w -X 'main.goversion=go version go1.16.7 linux/amd64'" \
+-o ./dist/fn_linux_amd64 cmd/main.go;
+```
+
+### 
