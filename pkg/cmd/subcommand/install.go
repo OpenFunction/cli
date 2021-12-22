@@ -27,8 +27,7 @@ import (
 )
 
 var (
-	w                 io.Writer
-	availableVersions []string
+	w io.Writer
 )
 
 // Install is the commandline for 'init' sub command
@@ -55,7 +54,6 @@ type Install struct {
 
 func init() {
 	w = os.Stdout
-	availableVersions = []string{"v0.3.1", "v0.4.0", "latest"}
 }
 
 // NewInstall returns an initialized Init instance
@@ -86,7 +84,7 @@ ofn install --async
 ofn install --region-cn --all
 
 # Install a specific version of OpenFunction (default is v0.4.0)
-ofn install --all --version v0.3.1
+ofn install --all --version v0.4.0
 
 # See more at: https://github.com/OpenFunction/cli/blob/main/docs/install.md
 `,
@@ -116,7 +114,7 @@ ofn install --all --version v0.3.1
 	cmd.Flags().BoolVar(&i.RegionCN, "region-cn", false, "For users who have limited access to gcr.io or github.com.")
 	cmd.Flags().BoolVar(&i.DryRun, "dry-run", false, "Used to prompt for the components and their versions to be installed by the current command.")
 	cmd.Flags().BoolVar(&i.WithUpgrade, "upgrade", false, "Upgrade components to target version while installing.")
-	cmd.Flags().StringVar(&i.OpenFunctionVersion, "version", "v0.4.0", "Used to specify the version of OpenFunction to be installed. The permitted versions are: v0.3.1, v0.4.0, latest.")
+	cmd.Flags().StringVar(&i.OpenFunctionVersion, "version", "v0.4.0", "Used to specify the version of OpenFunction to be installed.")
 	cmd.Flags().DurationVar(&i.Timeout, "timeout", 5*time.Minute, "Set timeout time. Default is 5 minutes.")
 	// In order to avoid too many options causing misunderstandings among users,
 	// we have hidden the following parameters,
@@ -131,6 +129,10 @@ ofn install --all --version v0.3.1
 
 func (i *Install) ValidateArgs(cmd *cobra.Command, args []string) error {
 	ti := util.NewTaskInformer("")
+
+	if i.OpenFunctionVersion == common.LatestVersion {
+		return nil
+	}
 
 	v, err := version.ParseGeneric(i.OpenFunctionVersion)
 	if err != nil {
@@ -245,15 +247,15 @@ func (i *Install) RunInstall(cl *k8s.Clientset, cmd *cobra.Command) error {
 		done()
 	}()
 
-	grp1, g1ctx := errgroup.WithContext(ctx)
+	grp, gctx := errgroup.WithContext(ctx)
 
 	start := time.Now()
 
 	if i.WithDapr {
 		// If Dapr already exists and --upgrade is not specified, skip this step.
 		if !inventoryExist[inventory.DaprName] || i.WithUpgrade {
-			grp1.Go(func() error {
-				return i.installDapr(g1ctx, operator)
+			grp.Go(func() error {
+				return i.installDapr(gctx, operator)
 			})
 		} else {
 			fmt.Fprintln(w, ti.SkipTask(inventory.DaprName))
@@ -263,8 +265,8 @@ func (i *Install) RunInstall(cl *k8s.Clientset, cmd *cobra.Command) error {
 	if i.WithKeda {
 		// If Keda already exists and --upgrade is not specified, skip this step.
 		if !inventoryExist[inventory.KedaName] || i.WithUpgrade {
-			grp1.Go(func() error {
-				return i.installKeda(g1ctx, cl, operator)
+			grp.Go(func() error {
+				return i.installKeda(gctx, cl, operator)
 			})
 		} else {
 			fmt.Fprintln(w, ti.SkipTask("Keda"))
@@ -274,8 +276,8 @@ func (i *Install) RunInstall(cl *k8s.Clientset, cmd *cobra.Command) error {
 	if i.WithKnative {
 		// If Knative Serving already exists and --upgrade is not specified, skip this step.
 		if !inventoryExist[inventory.KnativeServingName] || i.WithUpgrade {
-			grp1.Go(func() error {
-				return i.installKnativeServing(g1ctx, cl, operator)
+			grp.Go(func() error {
+				return i.installKnativeServing(gctx, cl, operator)
 			})
 		} else {
 			fmt.Fprintln(w, ti.SkipTask(inventory.KnativeServingName))
@@ -283,16 +285,16 @@ func (i *Install) RunInstall(cl *k8s.Clientset, cmd *cobra.Command) error {
 	}
 
 	if i.WithShipWright {
-		grp1.Go(func() error {
-			return i.installShipwright(g1ctx, cl, operator)
+		grp.Go(func() error {
+			return i.installShipwright(gctx, cl, operator)
 		})
 	}
 
 	if i.WithCertManager {
 		// If Cert Manager already exists and --upgrade is not specified, skip this step.
 		if !inventoryExist[inventory.CertManagerName] || i.WithUpgrade {
-			grp1.Go(func() error {
-				return i.installCertManager(g1ctx, cl, operator)
+			grp.Go(func() error {
+				return i.installCertManager(gctx, cl, operator)
 			})
 		} else {
 			fmt.Fprintln(w, ti.SkipTask(inventory.CertManagerName))
@@ -302,25 +304,19 @@ func (i *Install) RunInstall(cl *k8s.Clientset, cmd *cobra.Command) error {
 	if i.WithIngress {
 		// If Ingress Nginx already exists and --upgrade is not specified, skip this step.
 		if !inventoryExist[inventory.IngressName] || i.WithUpgrade {
-			grp1.Go(func() error {
-				return i.installIngress(g1ctx, cl, operator)
+			grp.Go(func() error {
+				return i.installIngress(gctx, cl, operator)
 			})
 		} else {
 			fmt.Fprintln(w, ti.SkipTask(inventory.IngressName))
 		}
 	}
 
-	if err := grp1.Wait(); err != nil {
+	if err := grp.Wait(); err != nil {
 		return errors.New(ti.TaskFail(err.Error()))
 	}
 
-	grp2, g2ctx := errgroup.WithContext(ctx)
-
-	grp2.Go(func() error {
-		return i.installOpenFunction(g2ctx, cl, operator)
-	})
-
-	if err := grp2.Wait(); err != nil {
+	if err := i.installOpenFunction(ctx, cl, operator); err != nil {
 		return errors.New(ti.TaskFail(err.Error()))
 	}
 
@@ -330,6 +326,8 @@ func (i *Install) RunInstall(cl *k8s.Clientset, cmd *cobra.Command) error {
 	if i.WithKnative {
 		ti.TipsOnUsingKnative()
 	}
+
+	ti.PrintOpenFunction()
 	return nil
 }
 
@@ -354,14 +352,18 @@ func (i *Install) mergeConditions() {
 	//if i.WithSyncRuntime {
 	//}
 
-	if i.openFunctionVersion.Major() == 0 && i.openFunctionVersion.Minor() == 3 {
-		i.WithIngress = false
-		i.WithCertManager = false
-	}
-
-	if i.openFunctionVersion.Major() == 0 && i.openFunctionVersion.Minor() == 4 {
-		i.WithIngress = false
+	if i.OpenFunctionVersion == common.LatestVersion {
 		i.WithCertManager = true
+	} else {
+		if i.openFunctionVersion.Major() == 0 && i.openFunctionVersion.Minor() == 3 {
+			i.WithIngress = false
+			i.WithCertManager = false
+		}
+
+		if i.openFunctionVersion.Major() == 0 && i.openFunctionVersion.Minor() == 4 {
+			i.WithIngress = false
+			i.WithCertManager = true
+		}
 	}
 }
 

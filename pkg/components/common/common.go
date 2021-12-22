@@ -34,7 +34,8 @@ const (
 	IngressNginxNamespace   = "ingress-nginx"
 	OpenFunctionNamespace   = "openfunction"
 
-	BaseVersion = "v0.3.1"
+	BaseVersion   = "v0.3.1"
+	LatestVersion = "latest"
 )
 
 type Operator struct {
@@ -289,11 +290,11 @@ func (o *Operator) UninstallKnativeServing(
 	waitForCleared bool,
 ) error {
 	var cmd string
-	cmd = fmt.Sprintf("delete -f %s", crdYamlFile)
+	cmd = fmt.Sprintf("delete -f %s", coreYamlFile)
 	if err := o.executor.KubectlExec(ctx, cmd, true); util.IgnoreNotFoundErr(err) != nil {
 		return err
 	}
-	cmd = fmt.Sprintf("delete -f %s", coreYamlFile)
+	cmd = fmt.Sprintf("delete -f %s", crdYamlFile)
 	if err := o.executor.KubectlExec(ctx, cmd, false); util.IgnoreNotFoundErr(err) != nil {
 		return err
 	}
