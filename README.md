@@ -1,32 +1,32 @@
 # ![OpenFunctionCtl](docs/images/logo.png)
 
-`cli` is the Command-Line Interface for [OpenFunction](https://github.com/OpenFunction/OpenFunction)
+`cli` is the command-line interface for [OpenFunction](https://github.com/OpenFunction/OpenFunction).
 
-The `cli` repo is used to track issues for the `OpenFunction`.  this tool allows users to focus on the core functionality of the OpenFunction, while also presenting the relationship between the OpenFunction and its dependent components in a more abstract and friendly way to the user.
+The `cli` repo is used to track issues for the `OpenFunction`. This tool allows you to focus on the core functionality of the OpenFunction, while also presents the relationship between the OpenFunction and its dependent components in a more abstract and friendly way.
 
 ## Main commands
 The main commands supported by the CLI are:
 - init: provides management for openfunction’s framework.
-- install: install OpenFunction and its dependencies.
-- uninstall: uninstall OpenFunction and its dependencies.
-- create: create a function from a file or stdin.
-- apply: apply a function from a file or stdin.
+- install: installs OpenFunction and its dependencies.
+- uninstall: uninstalls OpenFunction and its dependencies.
+- create: creates a function from a file or stdin.
+- apply: applies a function from a file or stdin.
 - get: prints a table of the most important information about the specified function.
   - get builder: prints important information about the builder.
-  - get serving:prints important information about the serving.
-- delete: delete a specified the function.
+  - get serving: prints important information about the serving.
+- delete: deletes the specified function.
 
 ## Getting started
 
-Visit [ofn release](https://github.com/OpenFunction/cli/releases/) to select the `ofn` cli to deploy to your cluster.
+Visit [ofn releases page](https://github.com/OpenFunction/cli/releases/) to download the `ofn` cli to deploy to your cluster.
 
 ### Use ofn to deploy OpenFunction
 
-> We assume that you have placed the artifacts from the above step under the appropriate path in `PATH` and renamed it `ofn`. 
+> Make sure you put the artifacts from the above step under the appropriate path in `PATH` and rename it `ofn`. 
 
-You can use the `ofn install --all` to complete a simple deployment. By default, this command will install the *v0.4.0* version of OpenFunction for you, while it will skip the installation process for components that already exist (you can use the `--upgrade` command to overwrite these components).
+Run `ofn install --all` to implement a simple deployment. By default, this command will install the *v0.4.0* version of OpenFunction and skips the installation of components that already exist. To overwrite the existing components, use the `--upgrade` command. 
 
-Please refer to the [ofn install docs](docs/install.md).
+For more information, refer to the [ofn install document](docs/install.md).
 
 ```shell
 # ofn install --all --upgrade
@@ -78,11 +78,11 @@ Enter 'y' to continue and 'n' to abort:
 
 ### Use ofn to uninstall OpenFunction
 
-> We assume that you have placed the artifacts from the above step under the appropriate path in `PATH` and renamed it `ofn`. 
+> Make sure you put the artifacts from the above step under the appropriate path in `PATH` and rename it `ofn`. 
 
-You can use `ofn uninstall --all` to easily uninstall OpenFunction and its dependencies (or just uninstall OpenFunction without arguments).
+Run `ofn uninstall --all` to uninstall OpenFunction and its dependencies (or just uninstall OpenFunction without arguments).
 
-Please refer to the [ofn uninstall docs](docs/uninstall.md).
+For more information, refer to the [ofn uninstall document](docs/uninstall.md).
 
 ```shell
 ~# ofn uninstall --all
@@ -124,9 +124,9 @@ Enter 'y' to continue and 'n' to abort:
 
 ### Build OpenFunction CLI
 
-You can also use `make build` to build the OpenFunction CLI —— `ofn`.
+To build the OpenFunction CLI——`ofn`, run `make build`.
 When the command is executed, you can find the artifact in the `. /dist` directory.
-Move it to the appropriate path in the `PATH` so that you can use it in your environment.
+Move it to an appropriate path in the `PATH` so that you can use it in your environment.
 
 ```shell
 ~# make build
