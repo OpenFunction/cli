@@ -17,7 +17,8 @@ This command will help you to uninstall OpenFunction and its dependencies.
 --shipwright         For uninstalling ShipWright.
 --sync               For uninstalling OpenFunction Sync Runtime (To be supported).
 --verbose            Show verbose information.
---version string     Used to specify the version of OpenFunction to be uninstalled. (default "v0.4.0")
+--yes                Automatic yes to prompts. ('-y' as a short form)
+--version string     Used to specify the version of OpenFunction to be uninstalled.
 --wait               Awaiting the results of the uninstallation.
 --timeout duration   Set timeout time. Default is 5 minutes. (default 5m0s)
 ```
@@ -54,11 +55,10 @@ ofn uninstall --all --wait
 
 ### Uninstall a specific version of OpenFunction
 
-> Default to v0.4.0 if no version specified
+> Default to the version of the OpenFunction currently installed
 
 The available versions are:
-- v0.3.1
-- v0.4.0
+- any stable version
 - latest
 
 ```shell
@@ -67,7 +67,7 @@ ofn uninstall --version v0.4.0
 
 ## Inventory
 
-During installation, the OpenFunction CLI keeps the installed component details in `$home/.ofn/inventory.yaml`. So during the uninstallation, the OpenFunction CLI will remove the relevant components based on the contents of `$home/.ofn/inventory.yaml`.
+During installation, the OpenFunction CLI keeps the installed component details in `$home/.ofn/<cluster name>-inventory.yaml`. So during the uninstallation, the OpenFunction CLI will remove the relevant components based on the contents of `$home/.ofn/<cluster name>-inventory.yaml`.
 
 In addition, the OpenFunction CLI supports obtaining the version of the component and the path to the component's yaml file from the environment variable. You can refer to the [Environment variables](install.md#environment-variables) for more information.
 

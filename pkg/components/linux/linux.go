@@ -81,6 +81,16 @@ func (e *Executor) KubectlExec(
 	return nil
 }
 
+func (e *Executor) getClusterName(ctx context.Context) (string, error) {
+	cmd := "kubectl config current-context"
+
+	if out, _, err := e.Exec(cmd); err != nil {
+		return "", err
+	} else {
+		return strings.TrimSuffix(out, "\n"), nil
+	}
+}
+
 func (e *Executor) RecordInventory(ctx context.Context, inventoryMap map[string]string) error {
 	dirname, err := os.UserHomeDir()
 	if err != nil {
@@ -93,7 +103,14 @@ func (e *Executor) RecordInventory(ctx context.Context, inventoryMap map[string]
 		}
 	}
 
-	filePath := filepath.Join(dirname, components.OpenFunctionDir, components.RecordFileName)
+	cName, err := e.getClusterName(ctx)
+	if err != nil {
+		return err
+	}
+
+	fileName := fmt.Sprintf(components.RecordFileNameTmpl, cName)
+
+	filePath := filepath.Join(dirname, components.OpenFunctionDir, fileName)
 	file, err := os.Open(filePath)
 	if err != nil {
 		return err
@@ -145,7 +162,14 @@ func (e *Executor) GetInventoryRecord(ctx context.Context) (*inventory.Record, e
 		}
 	}
 
-	filePath := filepath.Join(dirname, components.OpenFunctionDir, components.RecordFileName)
+	cName, err := e.getClusterName(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	fileName := fmt.Sprintf(components.RecordFileNameTmpl, cName)
+
+	filePath := filepath.Join(dirname, components.OpenFunctionDir, fileName)
 
 	if _, err := os.Stat(filePath); errors.Is(err, os.ErrNotExist) {
 		file, err = os.Create(filePath)
@@ -176,36 +200,35 @@ func (e *Executor) GetInventoryRecord(ctx context.Context) (*inventory.Record, e
 }
 
 func (e *Executor) DownloadKind(ctx context.Context) error {
-	DownloadCmd := "curl -Lo ./kind https://kind.sigs.k8s.io/dl/v0.11.1/kind-linux-amd64"
-	if _, _, err := e.Exec(DownloadCmd); err != nil {
+	downloadCmd := "curl -Lo ./kind https://kind.sigs.k8s.io/dl/v0.11.1/kind-linux-amd64"
+	if _, _, err := e.Exec(downloadCmd); err != nil {
 		return err
 	}
-	ChmodCmd := "chmod +x ./kind"
-	if _, _, err := e.Exec(ChmodCmd); err != nil {
+	chmodCmd := "chmod +x ./kind"
+	if _, _, err := e.Exec(chmodCmd); err != nil {
 		return err
 	}
-	MvCmd := "mv ./kind /usr/local/bin/kind"
-	if _, _, err := e.Exec(MvCmd); err != nil {
+	mvCmd := "mv ./kind /usr/local/bin/kind"
+	if _, _, err := e.Exec(mvCmd); err != nil {
 		return err
 	}
 	return nil
 }
 
 func (e *Executor) GetNodeIP(ctx context.Context) (string, error) {
-	GetNodeIP := "docker exec openfunction-control-plane sh -c \"ip addr | grep eth0$ | grep -Eo 'inet ([0-9]*\\.){3}[0-9]*' | grep -Eo '([0-9]*\\.){3}[0-9]*' | tr -d '\\n'\""
-	NodeIP, _, err := e.Exec(GetNodeIP)
+	getNodeIP := "docker exec openfunction-control-plane sh -c \"ip addr | grep eth0$ | grep -Eo 'inet ([0-9]*\\.){3}[0-9]*' | grep -Eo '([0-9]*\\.){3}[0-9]*' | tr -d '\\n'\""
+	nodeIP, _, err := e.Exec(getNodeIP)
 	if err != nil {
 		return "", err
 	}
-	return NodeIP, nil
+	return nodeIP, nil
 }
 
-func (e *Executor) CurlOpenFunction(ctx context.Context, endPoint string) error {
-	CurlCMD := fmt.Sprintf("curl %s", endPoint)
-	res, _, err := e.Exec(CurlCMD)
+func (e *Executor) CurlOpenFunction(ctx context.Context, endpoint string) (string, error) {
+	curlCMD := fmt.Sprintf("curl %s", endpoint)
+	res, _, err := e.Exec(curlCMD)
 	if err != nil {
-		return err
+		return "", err
 	}
-	fmt.Println(res)
-	return nil
+	return strings.TrimSuffix(res, "\n"), nil
 }

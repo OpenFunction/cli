@@ -7,6 +7,8 @@ This page describes the release process and the currently planned schedule for u
 | release series | date  (year-month-day) | release shepherd                            |
 |----------------|--------------------------------------------|---------------------------------------------|
 | v0.5.0          | 2021-12-21                           | Laminar (GitHub: @tpiperatgod) |
+| v0.5.1          | 2021-12-22                           | Laminar (GitHub: @tpiperatgod) |
+| v0.5.2          | 2022-01-03                           | Laminar (GitHub: @tpiperatgod) |
 
 # How to cut a new release
 

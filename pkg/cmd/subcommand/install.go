@@ -3,8 +3,10 @@ package subcommand
 import (
 	"bufio"
 	"context"
+	"encoding/json"
 	"fmt"
-	"io"
+	"io/ioutil"
+	"net/http"
 	"os"
 	"os/signal"
 	"reflect"
@@ -13,24 +15,24 @@ import (
 	"syscall"
 	"time"
 
-	"k8s.io/apimachinery/pkg/util/version"
-
 	"github.com/OpenFunction/cli/pkg/client"
 	"github.com/OpenFunction/cli/pkg/cmd/util"
+	"github.com/OpenFunction/cli/pkg/cmd/util/spinners"
 	"github.com/OpenFunction/cli/pkg/components/common"
 	"github.com/OpenFunction/cli/pkg/components/inventory"
+	"github.com/oliveagle/jsonpath"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
-	"golang.org/x/sync/errgroup"
+	"k8s.io/apimachinery/pkg/util/version"
 	"k8s.io/cli-runtime/pkg/genericclioptions"
 	k8s "k8s.io/client-go/kubernetes"
 )
 
-var (
-	w io.Writer
+const (
+	openFunctionLatestReleaseUrl = "https://api.github.com/repos/OpenFunction/OpenFunction/releases/latest"
 )
 
-// Install is the commandline for 'init' sub command
+// Install is the commandline for 'install' sub command
 type Install struct {
 	genericclioptions.IOStreams
 
@@ -47,13 +49,10 @@ type Install struct {
 	RegionCN            bool
 	OpenFunctionVersion string
 	DryRun              bool
-	WithUpgrade         bool
+	Upgrade             bool
+	Yes                 bool
 	Timeout             time.Duration
 	openFunctionVersion *version.Version
-}
-
-func init() {
-	w = os.Stdout
 }
 
 // NewInstall returns an initialized Init instance
@@ -83,7 +82,7 @@ ofn install --async
 # For users who have limited access to gcr.io or github.com to install OpenFunction
 ofn install --region-cn --all
 
-# Install a specific version of OpenFunction (default is v0.4.0)
+# Install a specific version of OpenFunction
 ofn install --all --version v0.4.0
 
 # See more at: https://github.com/OpenFunction/cli/blob/main/docs/install.md
@@ -113,9 +112,10 @@ ofn install --all --version v0.4.0
 	cmd.Flags().BoolVar(&i.WithAll, "all", false, "For installing all dependencies.")
 	cmd.Flags().BoolVar(&i.RegionCN, "region-cn", false, "For users who have limited access to gcr.io or github.com.")
 	cmd.Flags().BoolVar(&i.DryRun, "dry-run", false, "Used to prompt for the components and their versions to be installed by the current command.")
-	cmd.Flags().BoolVar(&i.WithUpgrade, "upgrade", false, "Upgrade components to target version while installing.")
-	cmd.Flags().StringVar(&i.OpenFunctionVersion, "version", "v0.4.0", "Used to specify the version of OpenFunction to be installed.")
-	cmd.Flags().DurationVar(&i.Timeout, "timeout", 5*time.Minute, "Set timeout time. Default is 5 minutes.")
+	cmd.Flags().BoolVar(&i.Upgrade, "upgrade", false, "Upgrade components to target version while installing.")
+	cmd.Flags().BoolVarP(&i.Yes, "yes", "y", false, "Automatic yes to prompts.")
+	cmd.Flags().StringVar(&i.OpenFunctionVersion, "version", "", "Used to specify the version of OpenFunction to be installed.")
+	cmd.Flags().DurationVar(&i.Timeout, "timeout", 10*time.Minute, "Set timeout time. Default is 10 minutes.")
 	// In order to avoid too many options causing misunderstandings among users,
 	// we have hidden the following parameters,
 	// but you can still find their usage instructions in the documentation.
@@ -128,25 +128,31 @@ ofn install --all --version v0.4.0
 }
 
 func (i *Install) ValidateArgs(cmd *cobra.Command, args []string) error {
-	ti := util.NewTaskInformer("")
-
 	if i.OpenFunctionVersion == common.LatestVersion {
 		return nil
 	}
 
+	if i.OpenFunctionVersion == "" {
+		v, e := getLatestStableVersion()
+		if e != nil {
+			return e
+		}
+		i.OpenFunctionVersion = v
+	}
+
 	v, err := version.ParseGeneric(i.OpenFunctionVersion)
 	if err != nil {
-		return errors.New(ti.TaskFail(fmt.Sprintf(
+		return errors.New(util.TaskFail(fmt.Sprintf(
 			"the specified version %s is not a valid version",
 			i.OpenFunctionVersion,
 		)))
 	}
 
 	if valid, err := common.IsVersionValid(v); err != nil {
-		return errors.New(ti.TaskFail(err.Error()))
+		return errors.New(util.TaskFail(err.Error()))
 	} else {
 		if !valid {
-			return errors.New(ti.TaskFail(fmt.Sprintf(
+			return errors.New(util.TaskFail(fmt.Sprintf(
 				"the specified version %s is lower than the supported version %s",
 				i.OpenFunctionVersion,
 				common.BaseVersion,
@@ -161,17 +167,16 @@ func (i *Install) ValidateArgs(cmd *cobra.Command, args []string) error {
 
 func (i *Install) RunInstall(cl *k8s.Clientset, cmd *cobra.Command) error {
 	operator := common.NewOperator(runtime.GOOS, i.OpenFunctionVersion, i.Timeout, i.RegionCN, i.Verbose)
-	ti := util.NewTaskInformer("")
 	continueFunc := func() bool {
 		reader := bufio.NewReader(os.Stdin)
-		fmt.Fprintln(w, ti.BeforeTask("You have used the `--upgrade` parameter, which means that the installation process "+
-			"will overwrite the components that already exist.\n"+
-			"Please ensure that you understand the meaning of this command "+
-			"and follow the prompts below to confirm the action.\n"+
-			"Enter 'y' to continue and 'n' to abort:"))
+		util.BeforeTask("You have specified the `--upgrade` flag, which means that the installation process " +
+			"will upgrade components currently installed.\n" +
+			"Please make sure that you're aware of the consequences of this command " +
+			"and follow the prompts below to confirm the upgrade.\n" +
+			"Enter 'y' to continue and 'n' to abort:")
 
 		for {
-			fmt.Fprint(w, ti.BeforeTask("-> "))
+			fmt.Print(util.YellowItalic("-> "))
 			text, _ := reader.ReadString('\n')
 			// convert CRLF to LF
 			text = strings.Replace(text, "\n", "", -1)
@@ -211,14 +216,18 @@ func (i *Install) RunInstall(cl *k8s.Clientset, cmd *cobra.Command) error {
 	operator.Inventory = inventoryPending
 	inventoryExist := getExistComponentsInventory(ctx, cl)
 
-	fmt.Fprintln(w, ti.BeforeTask("Start installing OpenFunction and its dependencies.\n"+
-		"Here are the components and corresponding versions to be installed:"))
+	util.BeforeTask("Start installing OpenFunction and its dependencies.\n" +
+		"The following components will be installed:")
 	printInventory(inventory.GetVersionMap(inventoryPending))
-	if !reflect.DeepEqual(inventoryExist, map[string]bool{}) {
-		fmt.Fprintln(w, ti.BeforeTask("The following components already exist:"))
+	if !reflect.DeepEqual(inventoryExist, map[string]bool{}) && !i.Yes {
+		if !i.Upgrade {
+			util.BeforeTask("The following existing components will be skipped:")
+		} else {
+			util.BeforeTask("The following existing components will be upgraded:")
+		}
 		for i, exist := range inventoryExist {
 			if exist {
-				fmt.Fprintln(w, ti.BeforeTask(fmt.Sprintf("\t- %s", i)))
+				util.BeforeTask(fmt.Sprintf("\t- %s", i))
 			}
 		}
 	}
@@ -227,7 +236,7 @@ func (i *Install) RunInstall(cl *k8s.Clientset, cmd *cobra.Command) error {
 		return nil
 	}
 
-	if i.WithUpgrade {
+	if i.Upgrade && !i.Yes {
 		if !continueFunc() {
 			return nil
 		}
@@ -247,87 +256,101 @@ func (i *Install) RunInstall(cl *k8s.Clientset, cmd *cobra.Command) error {
 		done()
 	}()
 
-	grp, gctx := errgroup.WithContext(ctx)
-
 	start := time.Now()
+
+	grp1 := spinners.NewSpinnerGroup()
+	count := 0
 
 	if i.WithDapr {
 		// If Dapr already exists and --upgrade is not specified, skip this step.
-		if !inventoryExist[inventory.DaprName] || i.WithUpgrade {
-			grp.Go(func() error {
-				return i.installDapr(gctx, operator)
-			})
-		} else {
-			fmt.Fprintln(w, ti.SkipTask(inventory.DaprName))
+		if !inventoryExist[inventory.DaprName] || i.Upgrade {
+			count += 1
+			grp1.AddSpinner()
+			go func(ctx context.Context, idx int) {
+				spinner := grp1.At(idx).WithName("Dapr")
+				installDapr(ctx, spinner, operator)
+			}(ctx, count-1)
 		}
 	}
 
 	if i.WithKeda {
 		// If Keda already exists and --upgrade is not specified, skip this step.
-		if !inventoryExist[inventory.KedaName] || i.WithUpgrade {
-			grp.Go(func() error {
-				return i.installKeda(gctx, cl, operator)
-			})
-		} else {
-			fmt.Fprintln(w, ti.SkipTask("Keda"))
+		if !inventoryExist[inventory.KedaName] || i.Upgrade {
+			count += 1
+			grp1.AddSpinner()
+			go func(ctx context.Context, idx int) {
+				spinner := grp1.At(idx).WithName("Keda")
+				installKeda(ctx, spinner, cl, operator)
+			}(ctx, count-1)
 		}
 	}
 
 	if i.WithKnative {
 		// If Knative Serving already exists and --upgrade is not specified, skip this step.
-		if !inventoryExist[inventory.KnativeServingName] || i.WithUpgrade {
-			grp.Go(func() error {
-				return i.installKnativeServing(gctx, cl, operator)
-			})
-		} else {
-			fmt.Fprintln(w, ti.SkipTask(inventory.KnativeServingName))
+		if !inventoryExist[inventory.KnativeServingName] || i.Upgrade {
+			count += 1
+			grp1.AddSpinner()
+			go func(ctx context.Context, idx int) {
+				spinner := grp1.At(idx).WithName("Knative Serving")
+				installKnativeServing(ctx, spinner, cl, operator)
+			}(ctx, count-1)
 		}
 	}
 
 	if i.WithShipWright {
-		grp.Go(func() error {
-			return i.installShipwright(gctx, cl, operator)
-		})
+		count += 1
+		grp1.AddSpinner()
+		go func(ctx context.Context, idx int) {
+			spinner := grp1.At(idx).WithName("Shipwright")
+			installShipwright(ctx, spinner, cl, operator)
+		}(ctx, count-1)
 	}
 
 	if i.WithCertManager {
 		// If Cert Manager already exists and --upgrade is not specified, skip this step.
-		if !inventoryExist[inventory.CertManagerName] || i.WithUpgrade {
-			grp.Go(func() error {
-				return i.installCertManager(gctx, cl, operator)
-			})
-		} else {
-			fmt.Fprintln(w, ti.SkipTask(inventory.CertManagerName))
+		if !inventoryExist[inventory.CertManagerName] || i.Upgrade {
+			count += 1
+			grp1.AddSpinner()
+			go func(ctx context.Context, idx int) {
+				spinner := grp1.At(idx).WithName("Cert Manager")
+				installCertManager(ctx, spinner, cl, operator)
+			}(ctx, count-1)
 		}
 	}
 
 	if i.WithIngress {
 		// If Ingress Nginx already exists and --upgrade is not specified, skip this step.
-		if !inventoryExist[inventory.IngressName] || i.WithUpgrade {
-			grp.Go(func() error {
-				return i.installIngress(gctx, cl, operator)
-			})
-		} else {
-			fmt.Fprintln(w, ti.SkipTask(inventory.IngressName))
+		if !inventoryExist[inventory.IngressName] || i.Upgrade {
+			count += 1
+			grp1.AddSpinner()
+			go func(ctx context.Context, idx int) {
+				spinner := grp1.At(idx).WithName("Ingress")
+				installIngress(ctx, spinner, cl, operator)
+			}(ctx, count-1)
 		}
 	}
 
-	if err := grp.Wait(); err != nil {
-		return errors.New(ti.TaskFail(err.Error()))
+	grp1.Start(ctx)
+	if err := grp1.Wait(); err != nil {
+		return errors.New(util.TaskFail(err.Error()))
 	}
 
-	if err := i.installOpenFunction(ctx, cl, operator); err != nil {
-		return errors.New(ti.TaskFail(err.Error()))
+	grp2 := spinners.NewSpinnerGroup()
+	grp2.AddSpinner()
+	go func(ctx context.Context, idx int) {
+		spinner := grp2.At(idx).WithName("OpenFunction")
+		installOpenFunction(ctx, spinner, cl, operator)
+	}(ctx, 0)
+
+	grp2.Start(ctx)
+	if err := grp2.Wait(); err != nil {
+		return errors.New(util.TaskFail(err.Error()))
 	}
 
 	end := time.Since(start)
-	fmt.Fprintln(w, ti.AllDone(end))
+	util.AllDone(end)
 
-	if i.WithKnative {
-		ti.TipsOnUsingKnative()
-	}
-
-	ti.PrintOpenFunction()
+	util.PrintOpenFunction()
 	return nil
 }
 
@@ -411,258 +434,287 @@ func getExistComponentsInventory(ctx context.Context, cl *k8s.Clientset) map[str
 }
 
 func printInventory(inventory map[string]string) {
-	ti := util.NewTaskInformer("DRYRUN")
-	ti.PrintTable(inventory)
+	util.PrintInventory(inventory)
 }
 
-func (i *Install) installDapr(ctx context.Context, operator *common.Operator) error {
+func installDapr(ctx context.Context, spinner *spinners.Spinner, operator *common.Operator) {
 	ctx, done := context.WithCancel(ctx)
 	defer done()
 
-	ti := util.NewTaskInformer("DAPR")
-
 	v := operator.Inventory[inventory.DaprName].GetVersion()
 
-	fmt.Fprintln(w, ti.TaskInfo("Installing Dapr..."))
-	fmt.Fprintln(w, ti.TaskInfo("Downloading Dapr Cli binary..."))
+	spinner.Update("Downloading Dapr CLI...")
 	if err := operator.DownloadDaprClient(ctx, v); err != nil {
-		return errors.Wrap(err, ti.TaskFailWithTitle("Failed to download Dapr client"))
+		spinner.Error(errors.Wrap(err, "Failed to download Dapr CLI"))
+		return
 	}
-	fmt.Fprintln(w, ti.TaskInfo("Initializing Dapr with Kubernetes mode..."))
+
+	spinner.Update("Initializing Dapr with Kubernetes mode...")
 	if err := operator.InitDapr(ctx, v); err != nil {
-		return errors.Wrap(err, ti.TaskFailWithTitle("Failed to install Dapr"))
+		spinner.Error(errors.Wrap(err, "Failed to init Dapr"))
+		return
 	}
 
 	// Record the version of Dapr
 	operator.Records.Dapr = v
 
-	fmt.Fprintln(w, ti.TaskSuccess())
-	return nil
+	spinner.Done()
+	return
 }
 
-func (i *Install) installKeda(ctx context.Context, cl *k8s.Clientset, operator *common.Operator) error {
+func installKeda(ctx context.Context, spinner *spinners.Spinner, cl *k8s.Clientset, operator *common.Operator) {
 	ctx, done := context.WithCancel(ctx)
 	defer done()
 
-	ti := util.NewTaskInformer("KEDA")
-
-	fmt.Fprintln(w, ti.TaskInfo("Installing Keda..."))
+	spinner.Update("Installing...")
 
 	v := operator.Inventory[inventory.KedaName].GetVersion()
 	yamls, err := operator.Inventory[inventory.KedaName].GetYamlFile(v)
 	if err != nil {
-		return errors.Wrap(err, ti.TaskFailWithTitle("Failed to get yaml file"))
+		spinner.Error(errors.Wrap(err, "Failed to get yaml file"))
+		return
 	}
 
 	if err := operator.InstallKeda(ctx, yamls["MAIN"]); err != nil {
-		return errors.Wrap(err, ti.TaskFailWithTitle("Failed to install Keda"))
+		spinner.Error(errors.Wrap(err, "Failed to install Keda"))
+		return
 	}
 
 	// Record the version of Keda
 	operator.Records.Keda = v
 
-	fmt.Fprintln(w, ti.TaskInfo("Checking if Keda is ready..."))
+	spinner.Update("Checking if Keda is ready...")
 	if err := operator.CheckKedaIsReady(ctx, cl); err != nil {
-		return errors.Wrap(err, ti.TaskFailWithTitle("Failed to check Keda readiness"))
+		spinner.Error(errors.Wrap(err, "Failed to check Keda readiness"))
+		return
 	}
 
-	fmt.Fprintln(w, ti.TaskSuccess())
-	return nil
+	spinner.Done()
+	return
 }
 
-func (i *Install) installKnativeServing(ctx context.Context, cl *k8s.Clientset, operator *common.Operator) error {
+func installKnativeServing(ctx context.Context, spinner *spinners.Spinner, cl *k8s.Clientset, operator *common.Operator) {
 	ctx, done := context.WithCancel(ctx)
 	defer done()
 
-	ti := util.NewTaskInformer("KNATIVE")
-
-	fmt.Fprintln(w, ti.TaskInfo("Installing Knative Serving..."))
+	spinner.Update("Installing Knative Serving...")
 
 	knv := operator.Inventory[inventory.KnativeServingName].GetVersion()
 	knYamls, err := operator.Inventory[inventory.KnativeServingName].GetYamlFile(knv)
 	if err != nil {
-		return errors.Wrap(err, ti.TaskFailWithTitle("Failed to get yaml file"))
+		spinner.Error(errors.Wrap(err, "Failed to get yaml file"))
+		return
 	}
 
 	if err := operator.InstallKnativeServing(ctx, knYamls["CRD"], knYamls["CORE"]); err != nil {
-		return errors.Wrap(err, ti.TaskFailWithTitle("Failed to install Knative Serving"))
+		spinner.Error(errors.Wrap(err, "Failed to install Knative Serving"))
+		return
 	}
 
 	// Record the version of KnativeServing
 	operator.Records.KnativeServing = knv
 
-	fmt.Fprintln(w, ti.TaskInfo("Checking if Knative Serving is ready..."))
+	spinner.Update("Checking if Knative Serving is ready...")
 	if err := operator.CheckKnativeServingIsReady(ctx, cl); err != nil {
-		return errors.Wrap(err, ti.TaskFailWithTitle("Failed to check Knative Serving readiness"))
+		spinner.Error(errors.Wrap(err, "Failed to check Knative Serving readiness"))
+		return
 	}
 
-	fmt.Fprintln(w, ti.TaskInfo("Configuring Knative Serving's DNS..."))
-
+	spinner.Update("Configuring Knative Serving's DNS...")
 	ddv := operator.Inventory[inventory.ServingDefaultDomainName].GetVersion()
 	ddYamls, err := operator.Inventory[inventory.ServingDefaultDomainName].GetYamlFile(ddv)
 	if err != nil {
-		return errors.Wrap(err, ti.TaskFailWithTitle("Failed to get yaml file"))
+		spinner.Error(errors.Wrap(err, "Failed to get yaml file"))
+		return
 	}
 	if err := operator.ConfigKnativeServingDefaultDomain(ctx, ddYamls["MAIN"]); err != nil {
-		return errors.Wrap(err, ti.TaskFailWithTitle("Failed to config Knative Serving's DNS"))
+		spinner.Error(errors.Wrap(err, "Failed to config Knative Serving's DNS"))
+		return
 	}
 
 	// Record the version of DefaultDomain
 	operator.Records.DefaultDomain = ddv
 
-	fmt.Fprintln(w, ti.TaskInfo("Installing Kourier as Knative's gateway..."))
-
+	spinner.Update("Installing Kourier as Knative's gateway...")
 	krv := operator.Inventory[inventory.KourierName].GetVersion()
 	krYamls, err := operator.Inventory[inventory.KourierName].GetYamlFile(krv)
 	if err != nil {
-		return errors.Wrap(err, ti.TaskFailWithTitle("Failed to get yaml file"))
+		spinner.Error(errors.Wrap(err, "Failed to get yaml file"))
+		return
 	}
 	if err := operator.InstallKourier(ctx, cl, krYamls["MAIN"]); err != nil {
-		return errors.Wrap(err, ti.TaskFailWithTitle("Failed to install Kourier"))
+		spinner.Error(errors.Wrap(err, "Failed to install Kourier"))
+		return
 	}
 
 	// Record the version of Kourier
 	operator.Records.Kourier = krv
 
-	fmt.Fprintln(w, ti.TaskInfo("Checking if Kourier is ready..."))
+	spinner.Update("Checking if Kourier is ready...")
 	if err := operator.CheckKourierIsReady(ctx, cl); err != nil {
-		return errors.Wrap(err, ti.TaskFailWithTitle("Failed to check Kourier readiness"))
+		spinner.Error(errors.Wrap(err, "Failed to check Kourier readiness"))
+		return
 	}
 
-	fmt.Fprintln(w, ti.TaskSuccess())
-	return nil
+	spinner.Done()
+	return
 }
 
-func (i *Install) installShipwright(ctx context.Context, cl *k8s.Clientset, operator *common.Operator) error {
+func installShipwright(ctx context.Context, spinner *spinners.Spinner, cl *k8s.Clientset, operator *common.Operator) {
 	ctx, done := context.WithCancel(ctx)
 	defer done()
 
-	ti := util.NewTaskInformer("SHIPWRIGHT")
-
-	fmt.Fprintln(w, ti.TaskInfo("Installing Tekton Pipelines..."))
-
+	spinner.Update("Installing Tekton Pipelines...")
 	tkv := operator.Inventory[inventory.TektonPipelinesName].GetVersion()
 	tkYamls, err := operator.Inventory[inventory.TektonPipelinesName].GetYamlFile(tkv)
 	if err != nil {
-		return errors.Wrap(err, ti.TaskFailWithTitle("Failed to get yaml file"))
+		spinner.Error(errors.Wrap(err, "Failed to get yaml file"))
+		return
 	}
 	if err := operator.InstallTektonPipelines(ctx, tkYamls["MAIN"]); err != nil {
-		return errors.Wrap(err, ti.TaskFailWithTitle("Failed to install Tekton Pipelines"))
+		spinner.Error(errors.Wrap(err, "Failed to install Tekton Pipelines"))
+		return
 	}
 
 	// Record the version of TektonPipelines
 	operator.Records.TektonPipelines = tkv
 
-	fmt.Fprintln(w, ti.TaskInfo("Checking if Tekton Pipelines is ready..."))
+	spinner.Update("Checking if Tekton Pipelines is ready...")
 	if err := operator.CheckTektonPipelinesIsReady(ctx, cl); err != nil {
-		return errors.Wrap(err, ti.TaskFailWithTitle("Failed to check Tekton Pipelines readiness"))
+		spinner.Error(errors.Wrap(err, "Failed to check Tekton Pipelines readiness"))
+		return
 	}
 
-	fmt.Fprintln(w, ti.TaskInfo("Installing Shipwright..."))
-
+	spinner.Update("Installing Shipwright...")
 	swv := operator.Inventory[inventory.ShipwrightName].GetVersion()
 	swYamls, err := operator.Inventory[inventory.ShipwrightName].GetYamlFile(swv)
 	if err != nil {
-		return errors.Wrap(err, ti.TaskFailWithTitle("Failed to get yaml file"))
+		spinner.Error(errors.Wrap(err, "Failed to get yaml file"))
+		return
 	}
 
 	if err := operator.InstallShipwright(ctx, swYamls["MAIN"]); err != nil {
-		return errors.Wrap(err, ti.TaskFailWithTitle("Failed to install Shipwright"))
+		spinner.Error(errors.Wrap(err, "Failed to install Shipwright"))
+		return
 	}
 
 	// Record the version of Shipwright
 	operator.Records.Shipwright = swv
 
-	fmt.Fprintln(w, ti.TaskInfo("Checking if Shipwright is ready..."))
+	spinner.Update("Checking if Shipwright is ready...")
 	if err := operator.CheckShipwrightIsReady(ctx, cl); err != nil {
-		return errors.Wrap(err, ti.TaskFailWithTitle("Failed to check Shipwright readiness"))
+		spinner.Error(errors.Wrap(err, "Failed to check Shipwright readiness"))
+		return
 	}
-	fmt.Fprintln(w, ti.TaskSuccess())
-	return nil
+
+	spinner.Done()
+	return
 }
 
-func (i *Install) installCertManager(ctx context.Context, cl *k8s.Clientset, operator *common.Operator) error {
+func installCertManager(ctx context.Context, spinner *spinners.Spinner, cl *k8s.Clientset, operator *common.Operator) {
 	ctx, done := context.WithCancel(ctx)
 	defer done()
 
-	ti := util.NewTaskInformer("CERTMANAGER")
-
-	fmt.Fprintln(w, ti.TaskInfo("Installing Cert Manager..."))
-
+	spinner.Update("Installing...")
 	v := operator.Inventory[inventory.CertManagerName].GetVersion()
 	yamls, err := operator.Inventory[inventory.CertManagerName].GetYamlFile(v)
 	if err != nil {
-		return errors.Wrap(err, ti.TaskFailWithTitle("Failed to get yaml file"))
+		spinner.Error(errors.Wrap(err, "Failed to get yaml file"))
+		return
 	}
 
 	if err := operator.InstallCertManager(ctx, yamls["MAIN"]); err != nil {
-		return errors.Wrap(err, ti.TaskFailWithTitle("Failed to install Cert Manager"))
+		spinner.Error(errors.Wrap(err, "Failed to install Cert Manager"))
+		return
 	}
 
 	// Record the version of CertManager
 	operator.Records.CertManager = v
 
-	fmt.Fprintln(w, ti.TaskInfo("Checking if Cert Manager is ready..."))
+	spinner.Update("Checking if Cert Manager is ready...")
 	if err := operator.CheckCertManagerIsReady(ctx, cl); err != nil {
-		return errors.Wrap(err, ti.TaskFailWithTitle("Failed to check Cert Manager readiness"))
+		spinner.Error(errors.Wrap(err, "Failed to check Cert Manager readiness"))
+		return
 	}
-	fmt.Fprintln(w, ti.TaskSuccess())
-	return nil
+
+	spinner.Done()
+	return
 }
 
-func (i *Install) installIngress(ctx context.Context, cl *k8s.Clientset, operator *common.Operator) error {
+func installIngress(ctx context.Context, spinner *spinners.Spinner, cl *k8s.Clientset, operator *common.Operator) {
 	ctx, done := context.WithCancel(ctx)
 	defer done()
 
-	ti := util.NewTaskInformer("INGRESS")
-
-	fmt.Fprintln(w, ti.TaskInfo("Installing Ingress..."))
-
+	spinner.Update("Installing...")
 	v := operator.Inventory[inventory.IngressName].GetVersion()
 	yamls, err := operator.Inventory[inventory.IngressName].GetYamlFile(v)
 	if err != nil {
-		return errors.Wrap(err, ti.TaskFailWithTitle("Failed to get yaml file"))
+		spinner.Error(errors.Wrap(err, "Failed to get yaml file"))
+		return
 	}
 
 	if err := operator.InstallIngressNginx(ctx, yamls["MAIN"]); err != nil {
-		return errors.Wrap(err, ti.TaskFailWithTitle("Failed to install Ingress"))
+		spinner.Error(errors.Wrap(err, "Failed to install Ingress"))
+		return
 	}
 
 	// Record the version of Ingress
 	operator.Records.Ingress = v
 
-	fmt.Fprintln(w, ti.TaskInfo("Checking if Ingress is ready..."))
+	spinner.Update("Checking if Ingress is ready...")
 	if err := operator.CheckIngressNginxIsReady(ctx, cl); err != nil {
-		return errors.Wrap(err, ti.TaskFailWithTitle("Failed to check Ingress Nginx readiness"))
+		spinner.Error(errors.Wrap(err, "Failed to check Ingress Nginx readiness"))
+		return
 	}
-	fmt.Fprintln(w, ti.TaskSuccess())
-	return nil
+
+	spinner.Done()
+	return
 }
 
-func (i *Install) installOpenFunction(ctx context.Context, cl *k8s.Clientset, operator *common.Operator) error {
+func installOpenFunction(ctx context.Context, spinner *spinners.Spinner, cl *k8s.Clientset, operator *common.Operator) {
 	ctx, done := context.WithCancel(ctx)
 	defer done()
 
-	ti := util.NewTaskInformer("OPENFUNCTION")
-
+	spinner.Update("Installing...")
 	v := operator.Inventory[inventory.OpenFunctionName].GetVersion()
 	yamls, err := operator.Inventory[inventory.OpenFunctionName].GetYamlFile(v)
 	if err != nil {
-		return errors.Wrap(err, ti.TaskFailWithTitle("Failed to get yaml file"))
+		spinner.Error(errors.Wrap(err, "Failed to get yaml file"))
+		return
 	}
 
-	fmt.Fprintln(w, ti.TaskInfo("Installing OpenFunction..."))
 	if err := operator.InstallOpenFunction(ctx, yamls["MAIN"]); err != nil {
-		return errors.Wrap(err, ti.TaskFailWithTitle("Failed to install OpenFunction"))
+		spinner.Error(errors.Wrap(err, "Failed to install OpenFunction"))
+		return
 	}
 
 	// Record the version of OpenFunction
 	operator.Records.OpenFunction = v
 
-	fmt.Fprintln(w, ti.TaskInfo("Checking if OpenFunction is ready..."))
+	spinner.Update("Checking if OpenFunction is ready..")
 	if err := operator.CheckOpenFunctionIsReady(ctx, cl); err != nil {
-		return errors.Wrap(err, ti.TaskFailWithTitle("Failed to check OpenFunction readiness"))
+		spinner.Error(errors.Wrap(err, "Failed to check OpenFunction readiness"))
+		return
 	}
-	fmt.Fprintln(w, ti.TaskSuccess())
-	return nil
+
+	spinner.Done()
+	return
+}
+
+func getLatestStableVersion() (string, error) {
+	var jsonData interface{}
+
+	resp, err := http.Get(openFunctionLatestReleaseUrl)
+	if err != nil {
+		return "", errors.Wrap(err, "failed to fetch OpenFunction latest release")
+	}
+	defer resp.Body.Close()
+	body, _ := ioutil.ReadAll(resp.Body)
+
+	json.Unmarshal(body, &jsonData)
+	res, err := jsonpath.JsonPathLookup(jsonData, "$.tag_name")
+	if err != nil {
+		return "", errors.Wrap(err, "failed to find the tag_name value in release information")
+	}
+	return res.(string), nil
 }
