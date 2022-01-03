@@ -29,51 +29,45 @@ Run `ofn install --all` to implement a simple deployment. By default, this comma
 For more information, refer to the [ofn install document](docs/install.md).
 
 ```shell
-# ofn install --all --upgrade
+# ofn install --all
 Start installing OpenFunction and its dependencies.
-Here are the components and corresponding versions to be installed:
+The following components will be installed:
 +------------------+---------+
 | COMPONENT        | VERSION |
 +------------------+---------+
-| Kourier          | 1.0.1   |
-| Keda             | 2.4.0   |
-| Tekton Pipelines | 0.30.0  |
-| OpenFunction     | 0.4.0   |
-| Dapr             | 1.5.1   |
-| CertManager      | 1.1.0   |
-| Shipwright       | 0.6.1   |
 | Knative Serving  | 1.0.1   |
+| Tekton Pipelines | 0.30.0  |
+| OpenFunction     | 0.5.0   |
+| Kourier          | 1.0.1   |
 | DefaultDomain    | 1.0.1   |
+| Keda             | 2.4.0   |
+| CertManager      | 1.5.4   |
+| Dapr             | 1.5.1   |
+| Shipwright       | 0.6.1   |
+| IngressNginx     | 1.1.0   |
 +------------------+---------+
-You have used the `--upgrade` parameter, which means that the installation process will overwrite the components that already exist.
-Make sure you know what happens when you do this.
-Enter 'y' to continue and 'n' to abort:
--> y
-🔄  -> INGRESS <- Installing Ingress...
-🔄  -> KNATIVE <- Installing Knative Serving...
-🔄  -> DAPR <- Installing Dapr...
-🔄  -> DAPR <- Downloading Dapr Cli binary...
-🔄  -> KEDA <- Installing Keda...
-🔄  -> CERTMANAGER <- Installing Cert Manager...
-🔄  -> SHIPWRIGHT <- Installing Shipwright...
-🔄  -> INGRESS <- Checking if Ingress is ready...
-🔄  -> KEDA <- Checking if Keda is ready...
-🔄  -> CERTMANAGER <- Checking if Cert Manager is ready...
-🔄  -> SHIPWRIGHT <- Checking if Shipwright is ready...
-🔄  -> KNATIVE <- Installing Kourier as Knative's gateway...
-🔄  -> KNATIVE <- Configuring Knative Serving's DNS...
-🔄  -> KNATIVE <- Checking if Knative Serving is ready...
-✅  -> CERTMANAGER <- Done!
-🔄  -> DAPR <- Initializing Dapr with Kubernetes mode...
-✅  -> SHIPWRIGHT <- Done!
-✅  -> KNATIVE <- Done!
-✅  -> INGRESS <- Done!
-✅  -> DAPR <- Done!
-✅  -> KEDA <- Done!
-🔄  -> OPENFUNCTION <- Installing OpenFunction...
-🔄  -> OPENFUNCTION <- Checking if OpenFunction is ready...
-✅  -> OPENFUNCTION <- Done!
-🚀 Completed in 2m3.638035129s.
+ ✓ Dapr - Completed!
+ ✓ Keda - Completed!
+ ✓ Knative Serving - Completed!
+ ✓ Shipwright - Completed!
+ ✓ Cert Manager - Completed!
+ ✓ Ingress - Completed!
+ ✓ OpenFunction - Completed!
+🚀 Completed in 1m40.055438303s.
+
+ ██████╗ ██████╗ ███████╗███╗   ██╗
+██╔═══██╗██╔══██╗██╔════╝████╗  ██║
+██║   ██║██████╔╝█████╗  ██╔██╗ ██║
+██║   ██║██╔═══╝ ██╔══╝  ██║╚██╗██║
+╚██████╔╝██║     ███████╗██║ ╚████║
+ ╚═════╝ ╚═╝     ╚══════╝╚═╝  ╚═══╝
+
+███████╗██╗   ██╗███╗   ██╗ ██████╗████████╗██╗ ██████╗ ███╗   ██╗
+██╔════╝██║   ██║████╗  ██║██╔════╝╚══██╔══╝██║██╔═══██╗████╗  ██║
+█████╗  ██║   ██║██╔██╗ ██║██║        ██║   ██║██║   ██║██╔██╗ ██║
+██╔══╝  ██║   ██║██║╚██╗██║██║        ██║   ██║██║   ██║██║╚██╗██║
+██║     ╚██████╔╝██║ ╚████║╚██████╗   ██║   ██║╚██████╔╝██║ ╚████║
+╚═╝      ╚═════╝ ╚═╝  ╚═══╝ ╚═════╝   ╚═╝   ╚═╝ ╚═════╝ ╚═╝  ╚═══╝
 ```
 
 ### Use ofn to uninstall OpenFunction
@@ -85,41 +79,32 @@ Run `ofn uninstall --all` to uninstall OpenFunction and its dependencies (or jus
 For more information, refer to the [ofn uninstall document](docs/uninstall.md).
 
 ```shell
-~# ofn uninstall --all
+~# ofn uninstall --all -y
 Start uninstalling OpenFunction and its dependencies.
 The following components already exist:
 +------------------+---------+
 | COMPONENT        | VERSION |
 +------------------+---------+
-| Cert Manager     | v1.5.4  |
-| Ingress Nginx    | 1.1.0   |
-| Tekton Pipelines | v0.28.1 |
-| Shipwright       | 0.6.0   |
-| OpenFunction     | v0.4.0  |
-| Dapr             | 1.4.3   |
+| OpenFunction     | 0.5.0   |
+| Knative Serving  | 1.0.1   |
+| Kourier          | 1.0.1   |
+| DefaultDomain    | 1.0.1   |
+| IngressNginx     | 1.1.0   |
 | Keda             | 2.4.0   |
-| Knative Serving  | 0.26.0  |
+| Dapr             | 1.5.1   |
+| Shipwright       | 0.6.1   |
+| Tekton Pipelines | 0.30.0  |
+| CertManager      | 1.5.4   |
 +------------------+---------+
-You can see the list of components to be uninstalled and the list of components already exist in the cluster.
-Make sure you know what happens when you do this.
-Enter 'y' to continue and 'n' to abort:
--> y
-🔄  -> OPENFUNCTION <- Uninstalling OpenFunction...
-🔄  -> KNATIVE <- Uninstalling Knative Serving...
-🔄  -> DAPR <- Uninstalling Dapr with Kubernetes mode...
-🔄  -> KEDA <- Uninstalling Keda...
-🔄  -> SHIPWRIGHT <- Uninstalling Tekton Pipeline & Shipwright...
-🔄  -> INGRESS <- Uninstalling Ingress...
-🔄  -> CERTMANAGER <- Uninstalling Cert Manager...
-✅  -> OPENFUNCTION <- Done!
-✅  -> DAPR <- Done!
-🔄  -> KNATIVE <- Uninstalling Kourier...
-✅  -> KEDA <- Done!
-✅  -> CERTMANAGER <- Done!
-✅  -> KNATIVE <- Done!
-✅  -> INGRESS <- Done!
-✅  -> SHIPWRIGHT <- Done!
-🚀 Completed in 1m21.683329262s.
+ ✓ Dapr - Completed!
+ ✓ Keda - Completed!
+ ✓ Knative Serving - Completed!
+ ✓ Shipwright - Completed!
+ ✓ Tekton Pipelines - Completed!
+ ✓ Cert Manager - Completed!
+ ✓ Ingress - Completed!
+ ✓ OpenFunction - Completed!
+🚀 Completed in 1m17.729501739s.
 ```
 
 ### Build OpenFunction CLI

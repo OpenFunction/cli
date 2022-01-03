@@ -13,17 +13,17 @@ import (
 
 	"github.com/OpenFunction/cli/pkg/client"
 	"github.com/OpenFunction/cli/pkg/cmd/util"
+	"github.com/OpenFunction/cli/pkg/cmd/util/spinners"
 	"github.com/OpenFunction/cli/pkg/components/common"
 	"github.com/OpenFunction/cli/pkg/components/inventory"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
-	"golang.org/x/sync/errgroup"
 	"k8s.io/apimachinery/pkg/util/version"
 	"k8s.io/cli-runtime/pkg/genericclioptions"
 	k8s "k8s.io/client-go/kubernetes"
 )
 
-// Uninstall is the commandline for 'init' sub command
+// Uninstall is the commandline for 'uninstall' sub command
 type Uninstall struct {
 	genericclioptions.IOStreams
 
@@ -40,6 +40,7 @@ type Uninstall struct {
 	RegionCN            bool
 	OpenFunctionVersion string
 	DryRun              bool
+	Yes                 bool
 	WaitForCleared      bool
 	Timeout             time.Duration
 }
@@ -74,7 +75,7 @@ ofn uninstall --region-cn --all
 # Uninstall OpenFunction and wait for the uninstallation to complete (default timeout is 300s/5m)
 ofn uninstall --all --wait
 
-# Uninstall a specific version of OpenFunction (default is v0.4.0)
+# Uninstall a specific version of OpenFunction
 ofn uninstall --all --version v0.4.0
 
 # See more at: https://github.com/OpenFunction/cli/blob/main/docs/uninstall.md
@@ -105,8 +106,9 @@ ofn uninstall --all --version v0.4.0
 	cmd.Flags().BoolVar(&i.RegionCN, "region-cn", false, "For users who have limited access to gcr.io or github.com.")
 	cmd.Flags().BoolVar(&i.DryRun, "dry-run", false, "Used to prompt for the components and their versions to be uninstalled by the current command.")
 	cmd.Flags().BoolVar(&i.WaitForCleared, "wait", false, "Awaiting the results of the uninstallation.")
-	cmd.Flags().StringVar(&i.OpenFunctionVersion, "version", "v0.4.0", "Used to specify the version of OpenFunction to be uninstalled.")
-	cmd.Flags().DurationVar(&i.Timeout, "timeout", 5*time.Minute, "Set timeout time. Default is 5 minutes.")
+	cmd.Flags().BoolVarP(&i.Yes, "yes", "y", false, "Automatic yes to prompts.")
+	cmd.Flags().StringVar(&i.OpenFunctionVersion, "version", "", "Used to specify the version of OpenFunction to be uninstalled.")
+	cmd.Flags().DurationVar(&i.Timeout, "timeout", 10*time.Minute, "Set timeout time. Default is 10 minutes.")
 	// In order to avoid too many options causing misunderstandings among users,
 	// we have hidden the following parameters,
 	// but you can still find their usage instructions in the documentation.
@@ -119,25 +121,27 @@ ofn uninstall --all --version v0.4.0
 }
 
 func (i *Uninstall) ValidateArgs(cmd *cobra.Command, args []string) error {
-	ti := util.NewTaskInformer("")
-
 	if i.OpenFunctionVersion == common.LatestVersion {
+		return nil
+	}
+
+	if i.OpenFunctionVersion == "" {
 		return nil
 	}
 
 	v, err := version.ParseGeneric(i.OpenFunctionVersion)
 	if err != nil {
-		return errors.New(ti.TaskFail(fmt.Sprintf(
+		return errors.New(util.TaskFail(fmt.Sprintf(
 			"the specified version %s is not a valid version",
 			i.OpenFunctionVersion,
 		)))
 	}
 
 	if valid, err := common.IsVersionValid(v); err != nil {
-		return errors.New(ti.TaskFail(err.Error()))
+		return errors.New(util.TaskFail(err.Error()))
 	} else {
 		if !valid {
-			return errors.New(ti.TaskFail(fmt.Sprintf(
+			return errors.New(util.TaskFail(fmt.Sprintf(
 				"the specified version %s is lower than the supported version %s",
 				i.OpenFunctionVersion,
 				common.BaseVersion,
@@ -150,15 +154,14 @@ func (i *Uninstall) ValidateArgs(cmd *cobra.Command, args []string) error {
 
 func (i *Uninstall) RunUninstall(cl *k8s.Clientset, cmd *cobra.Command) error {
 	operator := common.NewOperator(runtime.GOOS, i.OpenFunctionVersion, i.Timeout, i.RegionCN, i.Verbose)
-	ti := util.NewTaskInformer("")
 	continueFunc := func() bool {
 		reader := bufio.NewReader(os.Stdin)
-		fmt.Fprintln(w, ti.BeforeTask("Please ensure that you understand the meaning of this command "+
-			"and follow the prompts below to confirm the action.\n"+
-			"Enter 'y' to continue and 'n' to abort:"))
+		util.BeforeTask("Please ensure that you understand the meaning of this command " +
+			"and follow the prompts below to confirm the action.\n" +
+			"Enter 'y' to continue and 'n' to abort:")
 
 		for {
-			fmt.Fprint(w, ti.BeforeTask("-> "))
+			fmt.Print(util.YellowItalic("-> "))
 			text, _ := reader.ReadString('\n')
 			// convert CRLF to LF
 			text = strings.Replace(text, "\n", "", -1)
@@ -201,14 +204,15 @@ func (i *Uninstall) RunUninstall(cl *k8s.Clientset, cmd *cobra.Command) error {
 	}
 	operator.Inventory = inventoryPending
 
-	fmt.Fprintln(w, ti.BeforeTask("Start uninstalling OpenFunction and its dependencies."))
-	fmt.Fprintln(w, ti.BeforeTask("The following components already exist:"))
+	util.BeforeTask("Start uninstalling OpenFunction and its dependencies.")
+	util.BeforeTask("The following components already exist:")
 	printInventory(inventoryExist)
 
 	if i.DryRun {
 		return nil
 	}
-	if !continueFunc() {
+
+	if !i.Yes && !continueFunc() {
 		return nil
 	}
 
@@ -226,75 +230,101 @@ func (i *Uninstall) RunUninstall(cl *k8s.Clientset, cmd *cobra.Command) error {
 		done()
 	}()
 
-	grp, gctx := errgroup.WithContext(ctx)
-
 	start := time.Now()
+
+	group := spinners.NewSpinnerGroup()
+	count := 0
 
 	if i.WithDapr {
 		if operator.Records.Dapr != "" {
-			grp.Go(func() error {
-				return i.uninstallDapr(gctx, cl, operator)
-			})
+			count += 1
+			group.AddSpinner()
+			go func(ctx context.Context, idx int) {
+				spinner := group.At(idx).WithName("Dapr")
+				uninstallDapr(ctx, spinner, cl, operator, i.WaitForCleared)
+			}(ctx, count-1)
 		}
 	}
 
 	if i.WithKeda {
 		if operator.Records.Keda != "" {
-			grp.Go(func() error {
-				return i.uninstallKeda(gctx, cl, operator)
-			})
+			count += 1
+			group.AddSpinner()
+			go func(ctx context.Context, idx int) {
+				spinner := group.At(idx).WithName("Keda")
+				uninstallKeda(ctx, spinner, cl, operator, i.WaitForCleared)
+			}(ctx, count-1)
 		}
 	}
 
 	if i.WithKnative {
 		if operator.Records.KnativeServing != "" {
-			grp.Go(func() error {
-				return i.uninstallKnativeServing(gctx, cl, operator)
-			})
+			count += 1
+			group.AddSpinner()
+			go func(ctx context.Context, idx int) {
+				spinner := group.At(idx).WithName("Knative Serving")
+				uninstallKnativeServing(ctx, spinner, cl, operator, i.WaitForCleared)
+			}(ctx, count-1)
 		}
 	}
 
 	if i.WithShipWright {
 		if operator.Records.Shipwright != "" {
-			grp.Go(func() error {
-				return i.uninstallShipwright(gctx, cl, operator)
-			})
+			count += 1
+			group.AddSpinner()
+			go func(ctx context.Context, idx int) {
+				spinner := group.At(idx).WithName("Shipwright")
+				uninstallShipwright(ctx, spinner, cl, operator, i.WaitForCleared)
+			}(ctx, count-1)
 		}
 		if operator.Records.TektonPipelines != "" {
-			grp.Go(func() error {
-				return i.uninstallTektonPipelines(gctx, cl, operator)
-			})
+			count += 1
+			group.AddSpinner()
+			go func(ctx context.Context, idx int) {
+				spinner := group.At(idx).WithName("Tekton Pipelines")
+				uninstallTektonPipelines(ctx, spinner, cl, operator, i.WaitForCleared)
+			}(ctx, count-1)
 		}
 	}
 
 	if i.WithCertManager {
 		if operator.Records.CertManager != "" {
-			grp.Go(func() error {
-				return i.uninstallCertManager(gctx, cl, operator)
-			})
+			count += 1
+			group.AddSpinner()
+			go func(ctx context.Context, idx int) {
+				spinner := group.At(idx).WithName("Cert Manager")
+				uninstallCertManager(ctx, spinner, cl, operator, i.WaitForCleared)
+			}(ctx, count-1)
 		}
 	}
 
 	if i.WithIngress {
 		if operator.Records.Ingress != "" {
-			grp.Go(func() error {
-				return i.uninstallIngress(gctx, cl, operator)
-			})
+			count += 1
+			group.AddSpinner()
+			go func(ctx context.Context, idx int) {
+				spinner := group.At(idx).WithName("Ingress")
+				uninstallIngress(ctx, spinner, cl, operator, i.WaitForCleared)
+			}(ctx, count-1)
 		}
 	}
 
 	if operator.Records.OpenFunction != "" {
-		grp.Go(func() error {
-			return i.uninstallOpenFunction(gctx, cl, operator)
-		})
+		count += 1
+		group.AddSpinner()
+		go func(ctx context.Context, idx int) {
+			spinner := group.At(idx).WithName("OpenFunction")
+			uninstallOpenFunction(ctx, spinner, cl, operator, i.WaitForCleared)
+		}(ctx, count-1)
 	}
 
-	if err := grp.Wait(); err != nil {
-		return errors.New(ti.TaskFail(err.Error()))
+	group.Start(ctx)
+	if err := group.Wait(); err != nil {
+		return errors.New(util.TaskFail(err.Error()))
 	}
 
 	end := time.Since(start)
-	fmt.Fprintln(w, ti.AllDone(end))
+	util.AllDone(end)
 	return nil
 }
 
@@ -320,64 +350,62 @@ func (i *Uninstall) mergeConditions() {
 	//}
 }
 
-func (i *Uninstall) uninstallDapr(ctx context.Context, cl *k8s.Clientset, operator *common.Operator) error {
+func uninstallDapr(ctx context.Context, spinner *spinners.Spinner, cl *k8s.Clientset, operator *common.Operator, waitForCleared bool) {
 	ctx, done := context.WithCancel(ctx)
 	defer done()
 
-	ti := util.NewTaskInformer("DAPR")
+	spinner.Update("Uninstalling...")
 
-	fmt.Fprintln(w, ti.TaskInfo("Uninstalling Dapr with Kubernetes mode..."))
-	if err := operator.UninstallDapr(ctx, cl, i.WaitForCleared); err != nil {
-		return errors.Wrap(err, ti.TaskFailWithTitle("Failed to uninstall Dapr"))
+	if err := operator.UninstallDapr(ctx, cl, waitForCleared); err != nil {
+		spinner.Error(errors.Wrap(err, "Failed to uninstall Dapr"))
+		return
 	}
 
 	// Reset version to null
 	operator.Records.Dapr = ""
 
-	fmt.Fprintln(w, ti.TaskSuccess())
-	return nil
+	spinner.Done()
+	return
 }
 
-func (i *Uninstall) uninstallKeda(ctx context.Context, cl *k8s.Clientset, operator *common.Operator) error {
+func uninstallKeda(ctx context.Context, spinner *spinners.Spinner, cl *k8s.Clientset, operator *common.Operator, waitForCleared bool) {
 	ctx, done := context.WithCancel(ctx)
 	defer done()
 
-	ti := util.NewTaskInformer("KEDA")
-
-	fmt.Fprintln(w, ti.TaskInfo("Uninstalling Keda..."))
-
+	spinner.Update("Uninstalling...")
 	yamls, err := operator.Inventory[inventory.KedaName].GetYamlFile(operator.Records.Keda)
 	if err != nil {
-		return errors.Wrap(err, ti.TaskFailWithTitle("Failed to get yaml file"))
+		spinner.Error(errors.Wrap(err, "Failed to get yaml file"))
+		return
 	}
 
-	if err := operator.Uninstall(ctx, cl, yamls["MAIN"], common.KedaNamespace, false, i.WaitForCleared); err != nil {
-		return errors.Wrap(err, ti.TaskFailWithTitle("Failed to uninstall Keda"))
+	if err := operator.Uninstall(ctx, cl, yamls["MAIN"], common.KedaNamespace, false, waitForCleared); err != nil {
+		spinner.Error(errors.Wrap(err, "Failed to uninstall Keda"))
+		return
 	}
 
 	// Reset version to null
 	operator.Records.Keda = ""
 
-	fmt.Fprintln(w, ti.TaskSuccess())
-	return nil
+	spinner.Done()
+	return
 }
 
-func (i *Uninstall) uninstallKnativeServing(ctx context.Context, cl *k8s.Clientset, operator *common.Operator) error {
+func uninstallKnativeServing(ctx context.Context, spinner *spinners.Spinner, cl *k8s.Clientset, operator *common.Operator, waitForCleared bool) {
 	ctx, done := context.WithCancel(ctx)
 	defer done()
 
-	ti := util.NewTaskInformer("KNATIVE")
-
 	if operator.Records.DefaultDomain != "" {
-		fmt.Fprintln(w, ti.TaskInfo("Uninstalling Serving Default Domain..."))
-
+		spinner.Update("Uninstalling Serving Default Domain...")
 		yamls, err := operator.Inventory[inventory.ServingDefaultDomainName].GetYamlFile(operator.Records.DefaultDomain)
 		if err != nil {
-			return errors.Wrap(err, ti.TaskFailWithTitle("Failed to get yaml file"))
+			spinner.Error(errors.Wrap(err, "Failed to get yaml file"))
+			return
 		}
 
-		if err := operator.Uninstall(ctx, cl, yamls["MAIN"], common.KnativeServingNamespace, false, i.WaitForCleared); err != nil {
-			return errors.Wrap(err, ti.TaskFailWithTitle("Failed to uninstall Serving Default Domain"))
+		if err := operator.Uninstall(ctx, cl, yamls["MAIN"], common.KnativeServingNamespace, false, waitForCleared); err != nil {
+			spinner.Error(errors.Wrap(err, "Failed to uninstall Serving Default Domain"))
+			return
 		}
 
 		// Reset version to null
@@ -385,155 +413,152 @@ func (i *Uninstall) uninstallKnativeServing(ctx context.Context, cl *k8s.Clients
 	}
 
 	if operator.Records.Kourier != "" {
-		fmt.Fprintln(w, ti.TaskInfo("Uninstalling Kourier..."))
-
+		spinner.Update("Uninstalling Kourier...")
 		yamls, err := operator.Inventory[inventory.KourierName].GetYamlFile(operator.Records.Kourier)
 		if err != nil {
-			return errors.Wrap(err, ti.TaskFailWithTitle("Failed to get yaml file"))
+			spinner.Error(errors.Wrap(err, "Failed to get yaml file"))
+			return
 		}
 
-		if err := operator.Uninstall(ctx, cl, yamls["MAIN"], common.KedaNamespace, false, i.WaitForCleared); err != nil {
-			return errors.Wrap(err, ti.TaskFailWithTitle("Failed to uninstall Kourier"))
+		if err := operator.Uninstall(ctx, cl, yamls["MAIN"], common.KedaNamespace, true, waitForCleared); err != nil {
+			spinner.Error(errors.Wrap(err, "Failed to uninstall Kourier"))
+			return
 		}
 
 		// Reset version to null
 		operator.Records.Kourier = ""
 	}
 
-	fmt.Fprintln(w, ti.TaskInfo("Uninstalling Knative Serving..."))
-
+	spinner.Update("Uninstalling Knative Serving...")
 	yamls, err := operator.Inventory[inventory.KnativeServingName].GetYamlFile(operator.Records.KnativeServing)
 	if err != nil {
-		return errors.Wrap(err, ti.TaskFailWithTitle("Failed to get yaml file"))
+		spinner.Error(errors.Wrap(err, "Failed to get yaml file"))
+		return
 	}
 
-	if err := operator.UninstallKnativeServing(ctx, cl, yamls["CRD"], yamls["CORE"], i.WaitForCleared); err != nil {
-		return errors.Wrap(err, ti.TaskFailWithTitle("Failed to uninstall Knative Serving"))
+	if err := operator.UninstallKnativeServing(ctx, cl, yamls["CRD"], yamls["CORE"], waitForCleared); err != nil {
+		spinner.Error(errors.Wrap(err, "Failed to uninstall Knative Serving"))
+		return
 	}
 
 	// Reset version to null
 	operator.Records.KnativeServing = ""
 
-	fmt.Fprintln(w, ti.TaskSuccess())
-	return nil
+	spinner.Done()
+	return
 }
 
-func (i *Uninstall) uninstallShipwright(ctx context.Context, cl *k8s.Clientset, operator *common.Operator) error {
+func uninstallShipwright(ctx context.Context, spinner *spinners.Spinner, cl *k8s.Clientset, operator *common.Operator, waitForCleared bool) {
 	ctx, done := context.WithCancel(ctx)
 	defer done()
 
-	ti := util.NewTaskInformer("SHIPWRIGHT")
-
-	fmt.Fprintln(w, ti.TaskInfo("Uninstalling Shipwright..."))
-
+	spinner.Update("Uninstalling...")
 	yamls, err := operator.Inventory[inventory.ShipwrightName].GetYamlFile(operator.Records.Shipwright)
 	if err != nil {
-		return errors.Wrap(err, ti.TaskFailWithTitle("Failed to get yaml file"))
+		spinner.Error(errors.Wrap(err, "Failed to get yaml file"))
+		return
 	}
 
-	if err := operator.Uninstall(ctx, cl, yamls["MAIN"], common.ShipwrightNamespace, false, i.WaitForCleared); err != nil {
-		return errors.Wrap(err, ti.TaskFailWithTitle("Failed to uninstall Shipwright"))
+	if err := operator.Uninstall(ctx, cl, yamls["MAIN"], common.ShipwrightNamespace, false, waitForCleared); err != nil {
+		spinner.Error(errors.Wrap(err, "Failed to uninstall Shipwright"))
+		return
 	}
 
 	// Reset version to null
 	operator.Records.Shipwright = ""
 
-	fmt.Fprintln(w, ti.TaskSuccess())
-	return nil
+	spinner.Done()
+	return
 }
 
-func (i *Uninstall) uninstallTektonPipelines(ctx context.Context, cl *k8s.Clientset, operator *common.Operator) error {
+func uninstallTektonPipelines(ctx context.Context, spinner *spinners.Spinner, cl *k8s.Clientset, operator *common.Operator, waitForCleared bool) {
 	ctx, done := context.WithCancel(ctx)
 	defer done()
 
-	ti := util.NewTaskInformer("TEKTON")
-
-	fmt.Fprintln(w, ti.TaskInfo("Uninstalling Tekton Pipeline..."))
-
+	spinner.Update("Uninstalling...")
 	yamls, err := operator.Inventory[inventory.TektonPipelinesName].GetYamlFile(operator.Records.TektonPipelines)
 	if err != nil {
-		return errors.Wrap(err, ti.TaskFailWithTitle("Failed to get yaml file"))
+		spinner.Error(errors.Wrap(err, "Failed to get yaml file"))
+		return
 	}
 
-	if err := operator.Uninstall(ctx, cl, yamls["MAIN"], common.TektonPipelineNamespace, false, i.WaitForCleared); err != nil {
-		return errors.Wrap(err, ti.TaskFailWithTitle("Failed to uninstall Tekton Pipeline"))
+	if err := operator.Uninstall(ctx, cl, yamls["MAIN"], common.TektonPipelineNamespace, false, waitForCleared); err != nil {
+		spinner.Error(errors.Wrap(err, "Failed to uninstall Tekton Pipeline"))
+		return
 	}
 
 	// Reset version to null
 	operator.Records.TektonPipelines = ""
 
-	fmt.Fprintln(w, ti.TaskSuccess())
-	return nil
+	spinner.Done()
+	return
 }
 
-func (i *Uninstall) uninstallCertManager(ctx context.Context, cl *k8s.Clientset, operator *common.Operator) error {
+func uninstallCertManager(ctx context.Context, spinner *spinners.Spinner, cl *k8s.Clientset, operator *common.Operator, waitForCleared bool) {
 	ctx, done := context.WithCancel(ctx)
 	defer done()
 
-	ti := util.NewTaskInformer("CERTMANAGER")
-
-	fmt.Fprintln(w, ti.TaskInfo("Uninstalling Cert Manager..."))
-
+	spinner.Update("Uninstalling...")
 	yamls, err := operator.Inventory[inventory.CertManagerName].GetYamlFile(operator.Records.CertManager)
 	if err != nil {
-		return errors.Wrap(err, ti.TaskFailWithTitle("Failed to get yaml file"))
+		spinner.Error(errors.Wrap(err, "Failed to get yaml file"))
+		return
 	}
 
-	if err := operator.Uninstall(ctx, cl, yamls["MAIN"], common.CertManagerNamespace, false, i.WaitForCleared); err != nil {
-		return errors.Wrap(err, ti.TaskFailWithTitle("Failed to uninstall Cert Manager"))
+	if err := operator.Uninstall(ctx, cl, yamls["MAIN"], common.CertManagerNamespace, false, waitForCleared); err != nil {
+		spinner.Error(errors.Wrap(err, "Failed to uninstall Cert Manager"))
+		return
 	}
 
 	// Reset version to null
 	operator.Records.CertManager = ""
 
-	fmt.Fprintln(w, ti.TaskSuccess())
-	return nil
+	spinner.Done()
+	return
 }
 
-func (i *Uninstall) uninstallIngress(ctx context.Context, cl *k8s.Clientset, operator *common.Operator) error {
+func uninstallIngress(ctx context.Context, spinner *spinners.Spinner, cl *k8s.Clientset, operator *common.Operator, waitForCleared bool) {
 	ctx, done := context.WithCancel(ctx)
 	defer done()
 
-	ti := util.NewTaskInformer("INGRESS")
-
-	fmt.Fprintln(w, ti.TaskInfo("Uninstalling Ingress..."))
-
+	spinner.Update("Uninstalling...")
 	yamls, err := operator.Inventory[inventory.IngressName].GetYamlFile(operator.Records.Ingress)
 	if err != nil {
-		return errors.Wrap(err, ti.TaskFailWithTitle("Failed to get yaml file"))
+		spinner.Error(errors.Wrap(err, "Failed to get yaml file"))
+		return
 	}
 
-	if err := operator.Uninstall(ctx, cl, yamls["MAIN"], common.IngressNginxNamespace, false, i.WaitForCleared); err != nil {
-		return errors.Wrap(err, ti.TaskFailWithTitle("Failed to uninstall Ingress"))
+	if err := operator.Uninstall(ctx, cl, yamls["MAIN"], common.IngressNginxNamespace, false, waitForCleared); err != nil {
+		spinner.Error(errors.Wrap(err, "Failed to uninstall Ingress"))
+		return
 	}
 
 	// Reset version to null
 	operator.Records.Ingress = ""
 
-	fmt.Fprintln(w, ti.TaskSuccess())
-	return nil
+	spinner.Done()
+	return
 }
 
-func (i *Uninstall) uninstallOpenFunction(ctx context.Context, cl *k8s.Clientset, operator *common.Operator) error {
+func uninstallOpenFunction(ctx context.Context, spinner *spinners.Spinner, cl *k8s.Clientset, operator *common.Operator, waitForCleared bool) {
 	ctx, done := context.WithCancel(ctx)
 	defer done()
 
-	ti := util.NewTaskInformer("OPENFUNCTION")
-
-	fmt.Fprintln(w, ti.TaskInfo("Uninstalling OpenFunction..."))
-
+	spinner.Update("Uninstalling...")
 	yamls, err := operator.Inventory[inventory.OpenFunctionName].GetYamlFile(operator.Records.OpenFunction)
 	if err != nil {
-		return errors.Wrap(err, ti.TaskFailWithTitle("Failed to get yaml file"))
+		spinner.Error(errors.Wrap(err, "Failed to get yaml file"))
+		return
 	}
 
-	if err := operator.Uninstall(ctx, cl, yamls["MAIN"], common.OpenFunctionNamespace, false, i.WaitForCleared); err != nil {
-		return errors.Wrap(err, ti.TaskFailWithTitle("Failed to uninstall OpenFunction"))
+	if err := operator.Uninstall(ctx, cl, yamls["MAIN"], common.OpenFunctionNamespace, false, waitForCleared); err != nil {
+		spinner.Error(errors.Wrap(err, "Failed to uninstall OpenFunction"))
+		return
 	}
 
 	// Reset version to null
 	operator.Records.OpenFunction = ""
 
-	fmt.Fprintln(w, ti.TaskSuccess())
-	return nil
+	spinner.Done()
+	return
 }

@@ -7,8 +7,8 @@ import (
 )
 
 const (
-	OpenFunctionDir = ".ofn"
-	RecordFileName  = "inventory.yaml"
+	OpenFunctionDir    = ".ofn"
+	RecordFileNameTmpl = "%s-inventory.yaml"
 )
 
 // OperatorExecutor is an executor abstraction
@@ -22,5 +22,5 @@ type OperatorExecutor interface {
 	GetInventoryRecord(ctx context.Context) (*inventory.Record, error)
 	DownloadKind(ctx context.Context) error
 	GetNodeIP(ctx context.Context) (string, error)
-	CurlOpenFunction(ctx context.Context, endPoint string) error
+	CurlOpenFunction(ctx context.Context, endPoint string) (string, error)
 }

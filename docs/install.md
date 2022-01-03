@@ -17,6 +17,7 @@ This command will help you to install OpenFunction and its dependencies.
 --shipwright         For installing ShipWright.
 --sync               For installing OpenFunction Sync Runtime (To be supported).
 --upgrade            Upgrade components to target version while installing.
+--yes                Automatic yes to prompts. ('-y' as a short form)
 --verbose            Show verbose information.
 --version string     Used to specify the version of OpenFunction to be installed. (default "v0.4.0")
 --timeout duration   Set timeout time. Default is 5 minutes. (default 5m0s)
@@ -52,11 +53,10 @@ ofn install --upgrade --all
 
 ### Install a specific version of OpenFunction
 
-> default to v0.4.0 if no version specified
+> default to the latest stable version
 
 The available versions are:
-- v0.3.1
-- v0.4.0
+- any stable version
 - latest
 
 ```shell
@@ -69,7 +69,7 @@ OpenFunction relies on several components like Knative Serving, Dapr, Keda, Ship
 
 The OpenFunction CLI provides a default compatibility matrix based on which OpenFunction CLI will install a default selected version of each component for each version of kubernetes. 
 
-The OpenFunction CLI keeps the installed component details in `$home/.ofn/inventory.yaml`.
+The OpenFunction CLI keeps the installed component details in `$home/.ofn/<cluster name>-inventory.yaml`.
 
 | Components             | Kubernetes 1.17 | Kubernetes 1.18 | Kubernetes 1.19 | Kubernetes 1.20+ | CLI Option       | Description                                    |
 | ---------------------- | --------------- | --------------- | --------------- | ---------------- | ---------------- | ---------------------------------------------- |

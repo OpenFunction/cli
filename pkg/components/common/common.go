@@ -295,7 +295,7 @@ func (o *Operator) UninstallKnativeServing(
 		return err
 	}
 	cmd = fmt.Sprintf("delete -f %s", crdYamlFile)
-	if err := o.executor.KubectlExec(ctx, cmd, false); util.IgnoreNotFoundErr(err) != nil {
+	if err := o.executor.KubectlExec(ctx, cmd, true); util.IgnoreNotFoundErr(err) != nil {
 		return err
 	}
 
@@ -416,15 +416,15 @@ func (o *Operator) PrintEndpoint(ctx context.Context) (string, error) {
 		}
 
 	}
-	EndPointCMD := "kubectl get ksvc -l openfunction.io/serving=$(kubectl get functions function-sample-serving-only -o jsonpath='{.status.serving.resourceRef}') -o jsonpath='{.items[0].status.url}'"
-	EndPoint, _, err := o.executor.Exec(EndPointCMD)
+	endpointCMD := "kubectl get ksvc -l openfunction.io/serving=$(kubectl get functions function-sample-serving-only -o jsonpath='{.status.serving.resourceRef}') -o jsonpath='{.items[0].status.url}'"
+	endpoint, _, err := o.executor.Exec(endpointCMD)
 	if err != nil {
 		return "", err
 	}
-	return EndPoint, nil
+	return endpoint, nil
 }
 
-func (o *Operator) CurlOpenFunction(ctx context.Context, endPoint string) error {
+func (o *Operator) CurlOpenFunction(ctx context.Context, endPoint string) (string, error) {
 	return o.executor.CurlOpenFunction(ctx, endPoint)
 }
 

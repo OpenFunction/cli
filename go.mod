@@ -3,8 +3,11 @@ module github.com/OpenFunction/cli
 go 1.16
 
 require (
+	github.com/ahmetalpbalkan/go-cursor v0.0.0-20131010032410-8136607ea412
 	github.com/fatih/color v1.7.0
 	github.com/jedib0t/go-pretty/v6 v6.2.4
+	github.com/leaanthony/synx v0.1.0
+	github.com/oliveagle/jsonpath v0.0.0-20180606110733-2e52cf6e6852
 	github.com/openfunction v0.3.0
 	github.com/pkg/errors v0.9.1
 	github.com/spf13/cobra v1.2.1
