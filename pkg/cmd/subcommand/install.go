@@ -225,9 +225,9 @@ func (i *Install) RunInstall(cl *k8s.Clientset, cmd *cobra.Command) error {
 		} else {
 			util.BeforeTask("The following existing components will be upgraded:")
 		}
-		for i, exist := range inventoryExist {
+		for idx, exist := range inventoryExist {
 			if exist {
-				util.BeforeTask(fmt.Sprintf("\t- %s", i))
+				util.BeforeTask(fmt.Sprintf("\t- %s", idx))
 			}
 		}
 	}
