@@ -198,15 +198,13 @@ func (i *Uninstall) RunUninstall(cl *k8s.Clientset, cmd *cobra.Command) error {
 	if err != nil {
 		return errors.Wrap(err, "failed to get pending inventory")
 	}
-	inventoryExist, err := operator.GetInventoryRecord(ctx, true)
-	if err != nil {
-		return errors.Wrap(err, "failed to get inventory record")
-	}
 	operator.Inventory = inventoryPending
 
 	util.BeforeTask("Start uninstalling OpenFunction and its dependencies.")
-	util.BeforeTask("The following components already exist:")
-	printInventory(inventoryExist)
+	util.BeforeTask("The following component(s) will be uninstalled:")
+	for component, _ := range inventoryPending {
+		util.BeforeTask(fmt.Sprintf("\t- %s", component))
+	}
 
 	if i.DryRun {
 		return nil

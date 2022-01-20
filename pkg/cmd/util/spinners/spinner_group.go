@@ -66,9 +66,11 @@ func (g *SpinnerGroup) Start(ctx context.Context) {
 			select {
 			case <-ticker.C:
 				g.redraw()
+				g.checkIfNeedToTerminate()
 			case <-ctx.Done():
 				g.stop(ctx.Err().Error())
-			case <-g.errC:
+			case err := <-g.errC:
+				g.err = err
 				g.stop(stopped)
 			}
 		}
@@ -114,6 +116,23 @@ func (g *SpinnerGroup) redraw() {
 	g.drawn = true
 }
 
+func (g *SpinnerGroup) checkIfNeedToTerminate() {
+	i := 0
+	for _, s := range g.spinners {
+		if !s.IsActive() {
+			i += 1
+			if !s.IsDead {
+				s.stop(s.status.GetValue())
+				g.Done()
+				s.IsDead = true
+			}
+		}
+	}
+	if len(g.spinners) == i {
+		g.Stop()
+	}
+}
+
 func (g *SpinnerGroup) currentFrame() string {
 	return g.frames[g.currentFrameIdx]
 }
@@ -124,6 +143,7 @@ func (g *SpinnerGroup) AddSpinner() *SpinnerGroup {
 		message: synx.NewString(fmt.Sprintf("Spinner #%d", idx+1)),
 		status:  synx.NewInt(runningStatus),
 		group:   g,
+		IsDead:  false,
 	})
 	g.Add(1)
 	return g
@@ -145,6 +165,7 @@ func NewSpinnerGroupWithSize(size int) *SpinnerGroup {
 			message: synx.NewString(fmt.Sprintf("Spinner #%d", i+1)),
 			status:  synx.NewInt(runningStatus),
 			group:   group,
+			IsDead:  false,
 		}
 	}
 	group.Add(size)

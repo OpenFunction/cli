@@ -29,6 +29,7 @@ type Spinner struct {
 	status  *synx.Int
 	group   *SpinnerGroup
 	name    *string
+	IsDead  bool
 }
 
 func (s *Spinner) WithName(name string) *Spinner {
@@ -67,7 +68,6 @@ func (s *Spinner) ErrorWithMessage(message string, err error) {
 	s.Update(message)
 	s.stop(errorStatus)
 	if err != nil {
-		s.group.err = err
 		s.group.errC <- err
 	}
 }
@@ -75,7 +75,7 @@ func (s *Spinner) ErrorWithMessage(message string, err error) {
 func (s *Spinner) stop(status int) {
 	s.status.SetValue(status)
 	s.group.redraw()
-	s.group.Done()
+	// s.group.Done()
 }
 
 func (s *Spinner) refresh() string {
