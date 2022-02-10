@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	ospkg "os"
 	"strings"
 	"time"
 
@@ -68,6 +69,9 @@ func NewOperator(os string, version string, timeout time.Duration, inRegionCN bo
 	switch os {
 	case "linux":
 		op.executor = linux.NewExecutor(verbose)
+	default:
+		fmt.Fprint(ospkg.Stderr, "unsupported os: ", os)
+		ospkg.Exit(1)
 	}
 	return op
 }
