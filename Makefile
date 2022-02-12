@@ -60,7 +60,23 @@ else
   $(info $(H) Build with debugger information)
 endif
 
-LDFLAGS="-s -w -X 'main.goversion=$(shell go version)'"
+GIT_COMMIT = $(shell git rev-parse HEAD)
+GIT_SHA    = $(shell git rev-parse --short HEAD)
+GIT_TAG    = $(shell git describe --tags --abbrev=0 --exact-match 2>/dev/null)
+GIT_DIRTY  = $(shell test -n "`git status --porcelain`" && echo "dirty" || echo "clean")
+
+VERSION_METADATA = unreleased
+VERSION = latest
+# Clear the "unreleased" string in BuildMetadata
+ifneq ($(GIT_TAG),)
+	VERSION_METADATA =
+	VERSION = ${GIT_TAG}
+endif
+
+LDFLAGS += -X github.com/OpenFunction/cli/version.version=${VERSION}
+LDFLAGS += -X github.com/OpenFunction/cli/version.metadata=${VERSION_METADATA}
+LDFLAGS += -X github.com/OpenFunction/cli/version.gitCommit=${GIT_COMMIT}
+LDFLAGS += -X github.com/OpenFunction/cli/version.gitTreeState=${GIT_DIRTY}
 
 ################################################################################
 # Go build details                                                             #
@@ -76,7 +92,7 @@ BINS_OUT_DIR := $(OUT_DIR)
 build: fmt vet $(CLI_BINARY)
 
 $(CLI_BINARY):
-	CGO_ENABLED=$(CGO) GOOS=$(GOOS) GOARCH=$(GOARCH) go build $(GCFLAGS) -ldflags $(LDFLAGS) \
+	CGO_ENABLED=$(CGO) GOOS=$(GOOS) GOARCH=$(GOARCH) go build $(GCFLAGS) -ldflags '$(LDFLAGS)' \
 	-o $(BINS_OUT_DIR)/$(CLI_BINARY)_$(GOOS)_$(GOARCH)$(BINARY_EXT) cmd/main.go;
 
 ################################################################################
