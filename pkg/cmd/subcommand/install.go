@@ -355,13 +355,16 @@ func (i *Install) RunInstall(cl *k8s.Clientset, cmd *cobra.Command) error {
 }
 
 func (i *Install) mergeConditions() {
+
+	// We have to install the Shipwright because the OpenFunction must depend on it.
+	i.WithShipWright = true
+
 	// Update the corresponding conditions when WithAll is true
 	if i.WithAll {
 		i.WithDapr = true
 		i.WithKeda = true
 		i.WithIngress = true
 		i.WithKnative = true
-		i.WithShipWright = true
 		i.WithCertManager = true
 	}
 
