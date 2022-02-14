@@ -7,6 +7,9 @@ This page describes the release process and the currently planned schedule for u
 | release series | date  (year-month-day) | release shepherd                            |
 |----------------|--------------------------------------------|---------------------------------------------|
 | v0.5.0          | 2021-12-21                           | Laminar (GitHub: @tpiperatgod) |
+| v0.5.1          | 2021-12-22                           | Laminar (GitHub: @tpiperatgod) |
+| v0.5.2          | 2022-01-03                           | Laminar (GitHub: @tpiperatgod) |
+| v0.5.3          | 2022-02-14                           | Laminar (GitHub: @tpiperatgod) |
 
 # How to cut a new release
 
@@ -45,21 +48,23 @@ Create a PR for the changes to be reviewed.
 ## Publish the new release
 
 For new minor and major releases, create the `release-<major>.<minor>` branch starting at the PR merge commit.
+
 From now on, all work happens on the `release-<major>.<minor>` branch.
+
+Tag the new release with a tag named `v<major>.<minor>.<patch>`, e.g. `v2.1.3`. Note the `v` prefix. You can do the tagging on the commandline:
+
+```bash
+tag="v2.1.3" # Select a suitable and correct version
+git tag -a "${tag}" -m "${tag}"
+git push origin "${tag}"
+```
+Commit all the changes.
 
 Build the `ofn` cli:
 
 ```bash
 make build
 ```
-Tag the new release with a tag named `v<major>.<minor>.<patch>`, e.g. `v2.1.3`. Note the `v` prefix. You can do the tagging on the commandline:
-
-```bash
-tag="$(< VERSION)"
-git tag -a "${tag}" -m "${tag}"
-git push origin "${tag}"
-```
-Commit all the changes.
 
 Go to https://github.com/OpenFunction/cli/releases/new, associate the new release with the before pushed tag, paste in changes made to `CHANGELOG.md`, add cli file `ofn` and then click "Publish release".
 

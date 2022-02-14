@@ -24,7 +24,7 @@ Visit [ofn releases page](https://github.com/OpenFunction/cli/releases/) to down
 
 > Make sure you put the artifacts from the above step under the appropriate path in `PATH` and rename it `ofn`. 
 
-Run `ofn install --all` to implement a simple deployment. By default, this command will install the *v0.4.0* version of OpenFunction and skips the installation of components that already exist. To overwrite the existing components, use the `--upgrade` command. 
+Run `ofn install --all` to implement a simple deployment. By default, this command will install the *latest stable* version of OpenFunction and skips the installation of components that already exist. To overwrite the existing components, use the `--upgrade` command. 
 
 For more information, refer to the [ofn install document](docs/install.md).
 
@@ -106,20 +106,3 @@ The following components already exist:
  ✓ OpenFunction - Completed!
 🚀 Completed in 1m17.729501739s.
 ```
-
-### Build OpenFunction CLI
-
-To build the OpenFunction CLI——`ofn`, run `make build`.
-When the command is executed, you can find the artifact in the `. /dist` directory.
-Move it to an appropriate path in the `PATH` so that you can use it in your environment.
-
-```shell
-~# make build
-go fmt ./...
-/opt/openfunction/fn-cli/bin/goimports -w cmd/ pkg/ testdata/
-go vet ./...
-CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build  -ldflags "-s -w -X 'main.goversion=go version go1.16.7 linux/amd64'" \
--o ./dist/fn_linux_amd64 cmd/main.go;
-```
-
-### 
