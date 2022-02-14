@@ -9,6 +9,7 @@ This page describes the release process and the currently planned schedule for u
 | v0.5.0          | 2021-12-21                           | Laminar (GitHub: @tpiperatgod) |
 | v0.5.1          | 2021-12-22                           | Laminar (GitHub: @tpiperatgod) |
 | v0.5.2          | 2022-01-03                           | Laminar (GitHub: @tpiperatgod) |
+| v0.5.3          | 2022-02-14                           | Laminar (GitHub: @tpiperatgod) |
 
 # How to cut a new release
 
@@ -53,7 +54,7 @@ From now on, all work happens on the `release-<major>.<minor>` branch.
 Tag the new release with a tag named `v<major>.<minor>.<patch>`, e.g. `v2.1.3`. Note the `v` prefix. You can do the tagging on the commandline:
 
 ```bash
-tag="$(< VERSION)"
+tag="v2.1.3" # Select a suitable and correct version
 git tag -a "${tag}" -m "${tag}"
 git push origin "${tag}"
 ```

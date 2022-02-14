@@ -14,8 +14,6 @@
 
 # 0.5.1
 
-> This is the first release of OpenFunction CLI
-
 `[CHANGE]`
 
 `[FEATURE]`
@@ -26,8 +24,6 @@
 - Fix the issue that ofn install cannot install the latest version of OpenFunction #19
 
 # 0.5.2
-
-> This is the first release of OpenFunction CLI
 
 `[CHANGE]`
 
@@ -40,3 +36,17 @@
 - Adjust the function hierarchy to make some functions more generic
 
 `[BUGFIX]`
+
+# 0.5.3
+
+`[CHANGE]`
+- Adjust the condition of Shipwright so that it is always enabled
+
+`[FEATURE]`
+- Add `version` subcommand
+
+`[ENHANCEMENT]`
+
+`[BUGFIX]`
+- Fix the issue where the spinner was not terminating correctly
+- Use the correct prompts to circumvent exceptions when executing on unsupported operating systems
