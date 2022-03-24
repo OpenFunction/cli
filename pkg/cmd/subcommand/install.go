@@ -166,7 +166,7 @@ func (i *Install) ValidateArgs(cmd *cobra.Command, args []string) error {
 }
 
 func (i *Install) RunInstall(cl *k8s.Clientset, cmd *cobra.Command) error {
-	operator := common.NewOperator(runtime.GOOS, i.OpenFunctionVersion, i.Timeout, i.RegionCN, i.Verbose)
+	operator := common.NewOperator(runtime.GOOS, runtime.GOARCH, i.OpenFunctionVersion, i.Timeout, i.RegionCN, i.Verbose)
 	continueFunc := func() bool {
 		reader := bufio.NewReader(os.Stdin)
 		util.BeforeTask("You have specified the `--upgrade` flag, which means that the installation process " +

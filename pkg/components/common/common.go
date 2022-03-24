@@ -58,7 +58,7 @@ type Spec struct {
 	ExternalIPs []string `json:"externalIPs"`
 }
 
-func NewOperator(os string, version string, timeout time.Duration, inRegionCN bool, verbose bool) *Operator {
+func NewOperator(os, arch, version string, timeout time.Duration, inRegionCN bool, verbose bool) *Operator {
 	op := &Operator{
 		os:         os,
 		version:    version,
@@ -66,6 +66,12 @@ func NewOperator(os string, version string, timeout time.Duration, inRegionCN bo
 		verbose:    verbose,
 		timeout:    timeout,
 	}
+
+	if arch != "amd64" {
+		fmt.Fprint(ospkg.Stderr, "unsupported arch: ", arch)
+		ospkg.Exit(1)
+	}
+
 	switch os {
 	case "linux", "darwin":
 		op.executor = linux.NewExecutor(verbose)
@@ -145,8 +151,7 @@ func (o *Operator) InstallKnativeServing(ctx context.Context, crdYamlFile string
 		}
 	}
 
-	var cmd string
-	cmd = fmt.Sprintf("apply -f %s", crdYamlFile)
+	cmd := fmt.Sprintf("apply -f %s", crdYamlFile)
 	if err := o.executor.KubectlExec(ctx, cmd, true); err != nil {
 		return err
 	}

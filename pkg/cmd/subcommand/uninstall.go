@@ -153,7 +153,7 @@ func (i *Uninstall) ValidateArgs(cmd *cobra.Command, args []string) error {
 }
 
 func (i *Uninstall) RunUninstall(cl *k8s.Clientset, cmd *cobra.Command) error {
-	operator := common.NewOperator(runtime.GOOS, i.OpenFunctionVersion, i.Timeout, i.RegionCN, i.Verbose)
+	operator := common.NewOperator(runtime.GOOS, runtime.GOARCH, i.OpenFunctionVersion, i.Timeout, i.RegionCN, i.Verbose)
 	continueFunc := func() bool {
 		reader := bufio.NewReader(os.Stdin)
 		util.BeforeTask("Please ensure that you understand the meaning of this command " +
