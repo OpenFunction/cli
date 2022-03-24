@@ -58,7 +58,7 @@ type Spec struct {
 	ExternalIPs []string `json:"externalIPs"`
 }
 
-func NewOperator(os string, version string, timeout time.Duration, inRegionCN bool, verbose bool) *Operator {
+func NewOperator(os, arch, version string, timeout time.Duration, inRegionCN bool, verbose bool) *Operator {
 	op := &Operator{
 		os:         os,
 		version:    version,
@@ -66,8 +66,14 @@ func NewOperator(os string, version string, timeout time.Duration, inRegionCN bo
 		verbose:    verbose,
 		timeout:    timeout,
 	}
+
+	if arch != "amd64" {
+		fmt.Fprint(ospkg.Stderr, "unsupported arch: ", arch)
+		ospkg.Exit(1)
+	}
+
 	switch os {
-	case "linux":
+	case "linux", "darwin":
 		op.executor = linux.NewExecutor(verbose)
 	default:
 		fmt.Fprint(ospkg.Stderr, "unsupported os: ", os)
@@ -97,7 +103,7 @@ func (o *Operator) DownloadDaprClient(ctx context.Context, daprVersion string) e
 }
 
 func (o *Operator) InitDapr(ctx context.Context, daprVersion string) error {
-	cmd := fmt.Sprintf("dapr init -k --runtime-version %s", daprVersion)
+	cmd := fmt.Sprintf("dapr init -k --log-as-json --runtime-version %s", daprVersion)
 	if _, _, err := o.executor.Exec(cmd); err != nil && !strings.Contains(err.Error(), "still in use") {
 		return err
 	}
@@ -145,8 +151,7 @@ func (o *Operator) InstallKnativeServing(ctx context.Context, crdYamlFile string
 		}
 	}
 
-	var cmd string
-	cmd = fmt.Sprintf("apply -f %s", crdYamlFile)
+	cmd := fmt.Sprintf("apply -f %s", crdYamlFile)
 	if err := o.executor.KubectlExec(ctx, cmd, true); err != nil {
 		return err
 	}
@@ -566,10 +571,7 @@ func IsComponentExist(ctx context.Context, cl *k8s.Clientset, ns string, resourc
 			return false
 		} else {
 			active := job.Status.Active
-			if active >= 1 {
-				return true
-			}
-			return false
+			return active >= 1
 		}
 	} else {
 		if deploy, err := cl.AppsV1().Deployments(ns).Get(ctx, resourceName, metav1.GetOptions{}); err != nil {

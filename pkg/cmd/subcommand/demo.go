@@ -86,7 +86,7 @@ func (i *Demo) RunKind(cl *k8s.Clientset, cmd *cobra.Command) error {
 		}
 	}()
 
-	operator := common.NewOperator(runtime.GOOS, i.OpenFunctionVersion, i.Timeout, i.RegionCN, i.Verbose)
+	operator := common.NewOperator(runtime.GOOS, runtime.GOARCH, i.OpenFunctionVersion, i.Timeout, i.RegionCN, i.Verbose)
 
 	ctx, done := context.WithTimeout(
 		context.Background(),
@@ -248,11 +248,10 @@ func (i *Demo) createCluster(ctx context.Context, spinner *spinners.Spinner, ope
 	}
 
 	spinner.Done()
-	return
 }
 
 func (i *Demo) deleteCluster() {
-	operator := common.NewOperator(runtime.GOOS, i.OpenFunctionVersion, i.Timeout, i.RegionCN, i.Verbose)
+	operator := common.NewOperator(runtime.GOOS, runtime.GOARCH, i.OpenFunctionVersion, i.Timeout, i.RegionCN, i.Verbose)
 	ctx, done := context.WithTimeout(
 		context.Background(),
 		i.Timeout,
@@ -298,7 +297,6 @@ func (i *Demo) provisionDemoFunction(ctx context.Context, spinner *spinners.Spin
 	}
 
 	spinner.Done()
-	return
 }
 
 func (i *Demo) accessDemoFunction(ctx context.Context, cl *k8s.Clientset, operator *common.Operator) error {

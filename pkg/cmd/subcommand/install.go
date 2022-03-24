@@ -166,7 +166,7 @@ func (i *Install) ValidateArgs(cmd *cobra.Command, args []string) error {
 }
 
 func (i *Install) RunInstall(cl *k8s.Clientset, cmd *cobra.Command) error {
-	operator := common.NewOperator(runtime.GOOS, i.OpenFunctionVersion, i.Timeout, i.RegionCN, i.Verbose)
+	operator := common.NewOperator(runtime.GOOS, runtime.GOARCH, i.OpenFunctionVersion, i.Timeout, i.RegionCN, i.Verbose)
 	continueFunc := func() bool {
 		reader := bufio.NewReader(os.Stdin)
 		util.BeforeTask("You have specified the `--upgrade` flag, which means that the installation process " +
@@ -462,7 +462,6 @@ func installDapr(ctx context.Context, spinner *spinners.Spinner, operator *commo
 	operator.Records.Dapr = v
 
 	spinner.Done()
-	return
 }
 
 func installKeda(ctx context.Context, spinner *spinners.Spinner, cl *k8s.Clientset, operator *common.Operator) {
@@ -493,7 +492,6 @@ func installKeda(ctx context.Context, spinner *spinners.Spinner, cl *k8s.Clients
 	}
 
 	spinner.Done()
-	return
 }
 
 func installKnativeServing(ctx context.Context, spinner *spinners.Spinner, cl *k8s.Clientset, operator *common.Operator) {
@@ -560,7 +558,6 @@ func installKnativeServing(ctx context.Context, spinner *spinners.Spinner, cl *k
 	}
 
 	spinner.Done()
-	return
 }
 
 func installShipwright(ctx context.Context, spinner *spinners.Spinner, cl *k8s.Clientset, operator *common.Operator) {
@@ -611,7 +608,6 @@ func installShipwright(ctx context.Context, spinner *spinners.Spinner, cl *k8s.C
 	}
 
 	spinner.Done()
-	return
 }
 
 func installCertManager(ctx context.Context, spinner *spinners.Spinner, cl *k8s.Clientset, operator *common.Operator) {
@@ -641,7 +637,6 @@ func installCertManager(ctx context.Context, spinner *spinners.Spinner, cl *k8s.
 	}
 
 	spinner.Done()
-	return
 }
 
 func installIngress(ctx context.Context, spinner *spinners.Spinner, cl *k8s.Clientset, operator *common.Operator) {
@@ -671,7 +666,6 @@ func installIngress(ctx context.Context, spinner *spinners.Spinner, cl *k8s.Clie
 	}
 
 	spinner.Done()
-	return
 }
 
 func installOpenFunction(ctx context.Context, spinner *spinners.Spinner, cl *k8s.Clientset, operator *common.Operator) {
@@ -701,7 +695,6 @@ func installOpenFunction(ctx context.Context, spinner *spinners.Spinner, cl *k8s
 	}
 
 	spinner.Done()
-	return
 }
 
 func getLatestStableVersion() (string, error) {
