@@ -67,7 +67,7 @@ func NewOperator(os string, version string, timeout time.Duration, inRegionCN bo
 		timeout:    timeout,
 	}
 	switch os {
-	case "linux":
+	case "linux", "darwin":
 		op.executor = linux.NewExecutor(verbose)
 	default:
 		fmt.Fprint(ospkg.Stderr, "unsupported os: ", os)
@@ -97,7 +97,7 @@ func (o *Operator) DownloadDaprClient(ctx context.Context, daprVersion string) e
 }
 
 func (o *Operator) InitDapr(ctx context.Context, daprVersion string) error {
-	cmd := fmt.Sprintf("dapr init -k --runtime-version %s", daprVersion)
+	cmd := fmt.Sprintf("dapr init -k --log-as-json --runtime-version %s", daprVersion)
 	if _, _, err := o.executor.Exec(cmd); err != nil && !strings.Contains(err.Error(), "still in use") {
 		return err
 	}
@@ -566,10 +566,7 @@ func IsComponentExist(ctx context.Context, cl *k8s.Clientset, ns string, resourc
 			return false
 		} else {
 			active := job.Status.Active
-			if active >= 1 {
-				return true
-			}
-			return false
+			return active >= 1
 		}
 	} else {
 		if deploy, err := cl.AppsV1().Deployments(ns).Get(ctx, resourceName, metav1.GetOptions{}); err != nil {

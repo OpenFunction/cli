@@ -202,7 +202,7 @@ func (i *Uninstall) RunUninstall(cl *k8s.Clientset, cmd *cobra.Command) error {
 
 	util.BeforeTask("Start uninstalling OpenFunction and its dependencies.")
 	util.BeforeTask("The following component(s) will be uninstalled:")
-	for component, _ := range inventoryPending {
+	for component := range inventoryPending {
 		util.BeforeTask(fmt.Sprintf("\t- %s", component))
 	}
 
@@ -363,7 +363,6 @@ func uninstallDapr(ctx context.Context, spinner *spinners.Spinner, cl *k8s.Clien
 	operator.Records.Dapr = ""
 
 	spinner.Done()
-	return
 }
 
 func uninstallKeda(ctx context.Context, spinner *spinners.Spinner, cl *k8s.Clientset, operator *common.Operator, waitForCleared bool) {
@@ -386,7 +385,6 @@ func uninstallKeda(ctx context.Context, spinner *spinners.Spinner, cl *k8s.Clien
 	operator.Records.Keda = ""
 
 	spinner.Done()
-	return
 }
 
 func uninstallKnativeServing(ctx context.Context, spinner *spinners.Spinner, cl *k8s.Clientset, operator *common.Operator, waitForCleared bool) {
@@ -443,7 +441,6 @@ func uninstallKnativeServing(ctx context.Context, spinner *spinners.Spinner, cl 
 	operator.Records.KnativeServing = ""
 
 	spinner.Done()
-	return
 }
 
 func uninstallShipwright(ctx context.Context, spinner *spinners.Spinner, cl *k8s.Clientset, operator *common.Operator, waitForCleared bool) {
@@ -466,7 +463,6 @@ func uninstallShipwright(ctx context.Context, spinner *spinners.Spinner, cl *k8s
 	operator.Records.Shipwright = ""
 
 	spinner.Done()
-	return
 }
 
 func uninstallTektonPipelines(ctx context.Context, spinner *spinners.Spinner, cl *k8s.Clientset, operator *common.Operator, waitForCleared bool) {
@@ -489,7 +485,6 @@ func uninstallTektonPipelines(ctx context.Context, spinner *spinners.Spinner, cl
 	operator.Records.TektonPipelines = ""
 
 	spinner.Done()
-	return
 }
 
 func uninstallCertManager(ctx context.Context, spinner *spinners.Spinner, cl *k8s.Clientset, operator *common.Operator, waitForCleared bool) {
@@ -512,7 +507,6 @@ func uninstallCertManager(ctx context.Context, spinner *spinners.Spinner, cl *k8
 	operator.Records.CertManager = ""
 
 	spinner.Done()
-	return
 }
 
 func uninstallIngress(ctx context.Context, spinner *spinners.Spinner, cl *k8s.Clientset, operator *common.Operator, waitForCleared bool) {
@@ -535,7 +529,6 @@ func uninstallIngress(ctx context.Context, spinner *spinners.Spinner, cl *k8s.Cl
 	operator.Records.Ingress = ""
 
 	spinner.Done()
-	return
 }
 
 func uninstallOpenFunction(ctx context.Context, spinner *spinners.Spinner, cl *k8s.Clientset, operator *common.Operator, waitForCleared bool) {
@@ -558,5 +551,4 @@ func uninstallOpenFunction(ctx context.Context, spinner *spinners.Spinner, cl *k
 	operator.Records.OpenFunction = ""
 
 	spinner.Done()
-	return
 }

@@ -248,7 +248,6 @@ func (i *Demo) createCluster(ctx context.Context, spinner *spinners.Spinner, ope
 	}
 
 	spinner.Done()
-	return
 }
 
 func (i *Demo) deleteCluster() {
@@ -298,7 +297,6 @@ func (i *Demo) provisionDemoFunction(ctx context.Context, spinner *spinners.Spin
 	}
 
 	spinner.Done()
-	return
 }
 
 func (i *Demo) accessDemoFunction(ctx context.Context, cl *k8s.Clientset, operator *common.Operator) error {
