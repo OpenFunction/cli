@@ -89,11 +89,18 @@ BINS_OUT_DIR := $(OUT_DIR)
 # Target: build                                                                #
 ################################################################################
 .PHONY: build
-build: fmt vet $(CLI_BINARY)
+build: test $(CLI_BINARY)
 
 $(CLI_BINARY):
 	CGO_ENABLED=$(CGO) GOOS=$(GOOS) GOARCH=$(GOARCH) go build $(GCFLAGS) -ldflags '$(LDFLAGS)' \
 	-o $(BINS_OUT_DIR)/$(CLI_BINARY)_$(GOOS)_$(GOARCH)$(BINARY_EXT) cmd/main.go;
+
+################################################################################
+# Target: build                                                                #
+################################################################################
+.PHONY: test
+test: fmt vet
+	go test -v ./... -coverprofile cover.out
 
 ################################################################################
 # Target: lint                                                                 #

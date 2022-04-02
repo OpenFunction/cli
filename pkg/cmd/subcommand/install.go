@@ -37,14 +37,15 @@ type Install struct {
 	genericclioptions.IOStreams
 
 	Verbose             bool
+	Runtimes            []string
+	Ingress             string
+	WithoutCI           bool
 	WithDapr            bool
 	WithKeda            bool
 	WithKnative         bool
 	WithShipWright      bool
 	WithCertManager     bool
-	WithIngress         bool
-	WithAsyncRuntime    bool
-	WithSyncRuntime     bool
+	WithIngressNginx    bool
 	WithAll             bool
 	RegionCN            bool
 	OpenFunctionVersion string
@@ -77,7 +78,7 @@ func NewCmdInstall(restClient util.Getter, ioStreams genericclioptions.IOStreams
 ofn install --all
 
 # Install OpenFunction with a specific runtime
-ofn install --async
+ofn install --runtime async 
 
 # For users who have limited access to gcr.io or github.com to install OpenFunction
 ofn install --region-cn --all
@@ -95,20 +96,19 @@ ofn install --all --version v0.4.0
 			return nil
 		},
 		Run: func(cmd *cobra.Command, args []string) {
-			util.CheckErr(i.ValidateArgs(cmd, args))
+			util.CheckErr(i.ValidateArgs())
 			util.CheckErr(i.RunInstall(cl, cmd))
 		},
 	}
 
+	cmd.PersistentFlags().StringSliceVarP(&i.Runtimes, "runtime", "r", []string{"knative"}, "List of runtimes to be installed, optionally \"knative\", \"async\".")
+	cmd.PersistentFlags().StringVar(&i.Ingress, "ingress", "nginx", "The type of ingress controller to be installed, optionally \"nginx\".")
+	cmd.Flags().BoolVar(&i.WithoutCI, "without-ci", false, "Skip the installation of CI components.")
 	cmd.Flags().BoolVar(&i.Verbose, "verbose", false, "Show verbose information.")
-	cmd.Flags().BoolVar(&i.WithDapr, "dapr", false, "For installing Dapr.")
-	cmd.Flags().BoolVar(&i.WithKeda, "keda", false, "For installing Keda.")
-	cmd.Flags().BoolVar(&i.WithKnative, "knative", false, "For installing Knative Serving (with Kourier as default gateway).")
-	cmd.Flags().BoolVar(&i.WithShipWright, "shipwright", false, "For installing ShipWright.")
-	cmd.Flags().BoolVar(&i.WithCertManager, "cert-manager", false, "For installing Cert Manager.")
-	cmd.Flags().BoolVar(&i.WithIngress, "ingress", false, "For installing Ingress Nginx.")
-	cmd.Flags().BoolVar(&i.WithAsyncRuntime, "async", false, "For installing OpenFunction Async Runtime (Dapr & Keda).")
-	cmd.Flags().BoolVar(&i.WithSyncRuntime, "sync", false, "For installing OpenFunction Sync Runtime (To be supported).")
+	cmd.Flags().BoolVar(&i.WithDapr, "with-dapr", false, "For installing Dapr.")
+	cmd.Flags().BoolVar(&i.WithKeda, "with-keda", false, "For installing Keda.")
+	cmd.Flags().BoolVar(&i.WithKnative, "with-knative", false, "For installing Knative Serving (with Kourier as default gateway).")
+	cmd.Flags().BoolVar(&i.WithIngressNginx, "with-ingress-nginx", false, "For installing Ingress Nginx.")
 	cmd.Flags().BoolVar(&i.WithAll, "all", false, "For installing all dependencies.")
 	cmd.Flags().BoolVar(&i.RegionCN, "region-cn", false, "For users who have limited access to gcr.io or github.com.")
 	cmd.Flags().BoolVar(&i.DryRun, "dry-run", false, "Used to prompt for the components and their versions to be installed by the current command.")
@@ -119,15 +119,14 @@ ofn install --all --version v0.4.0
 	// In order to avoid too many options causing misunderstandings among users,
 	// we have hidden the following parameters,
 	// but you can still find their usage instructions in the documentation.
-	cmd.Flags().MarkHidden("ingress")
-	cmd.Flags().MarkHidden("cert-manager")
-	cmd.Flags().MarkHidden("shipwright")
-	cmd.Flags().MarkHidden("keda")
-	cmd.Flags().MarkHidden("dapr")
+	cmd.Flags().MarkHidden("with-ingress-nginx")
+	cmd.Flags().MarkHidden("with-keda")
+	cmd.Flags().MarkHidden("with-dapr")
+	cmd.Flags().MarkHidden("with-knative")
 	return cmd
 }
 
-func (i *Install) ValidateArgs(cmd *cobra.Command, args []string) error {
+func (i *Install) ValidateArgs() error {
 	if i.OpenFunctionVersion == common.LatestVersion {
 		return nil
 	}
@@ -198,7 +197,10 @@ func (i *Install) RunInstall(cl *k8s.Clientset, cmd *cobra.Command) error {
 
 	// Determine which components need to be enabled
 	// and update all options to be consistent.
-	i.mergeConditions()
+	if err := i.calculateConditions(); err != nil {
+		return errors.Wrap(err, "failed to calculate conditions")
+	}
+
 	inventoryPending, err := inventory.GetInventory(
 		cl,
 		i.RegionCN,
@@ -207,7 +209,7 @@ func (i *Install) RunInstall(cl *k8s.Clientset, cmd *cobra.Command) error {
 		i.WithDapr,
 		i.WithShipWright,
 		i.WithCertManager,
-		i.WithIngress,
+		i.WithIngressNginx,
 		i.OpenFunctionVersion,
 	)
 	if err != nil {
@@ -298,12 +300,15 @@ func (i *Install) RunInstall(cl *k8s.Clientset, cmd *cobra.Command) error {
 	}
 
 	if i.WithShipWright {
-		count += 1
-		grp1.AddSpinner()
-		go func(ctx context.Context, idx int) {
-			spinner := grp1.At(idx).WithName("Shipwright")
-			installShipwright(ctx, spinner, cl, operator)
-		}(ctx, count-1)
+		// If Shipwright already exists and --upgrade is not specified, skip this step.
+		if !inventoryExist[inventory.ShipwrightName] || i.Upgrade {
+			count += 1
+			grp1.AddSpinner()
+			go func(ctx context.Context, idx int) {
+				spinner := grp1.At(idx).WithName("Shipwright")
+				installShipwright(ctx, spinner, cl, operator)
+			}(ctx, count-1)
+		}
 	}
 
 	if i.WithCertManager {
@@ -318,7 +323,7 @@ func (i *Install) RunInstall(cl *k8s.Clientset, cmd *cobra.Command) error {
 		}
 	}
 
-	if i.WithIngress {
+	if i.WithIngressNginx {
 		// If Ingress Nginx already exists and --upgrade is not specified, skip this step.
 		if !inventoryExist[inventory.IngressName] || i.Upgrade {
 			count += 1
@@ -354,43 +359,60 @@ func (i *Install) RunInstall(cl *k8s.Clientset, cmd *cobra.Command) error {
 	return nil
 }
 
-func (i *Install) mergeConditions() {
+func (i *Install) calculateConditions() error {
 
-	// We have to install the Shipwright because the OpenFunction must depend on it.
+	// Enable shipwright by default
 	i.WithShipWright = true
 
-	// Update the corresponding conditions when WithAll is true
+	// Calculate runtime condition
+	for _, rt := range i.Runtimes {
+		switch rt {
+		case "knative":
+			i.WithKnative = true
+			i.WithIngressNginx = true
+		case "async":
+			i.WithDapr = true
+			i.WithKeda = true
+		default:
+			return errors.Errorf("invalid runtime: %s", rt)
+		}
+	}
+
+	// Calculate ingress condition
+	switch i.Ingress {
+	case "nginx":
+		i.WithIngressNginx = true
+	default:
+		return errors.Errorf("invalid ingress controller: %s", i.Ingress)
+	}
+
+	// Update the corresponding conditions when --all is set
 	if i.WithAll {
 		i.WithDapr = true
 		i.WithKeda = true
-		i.WithIngress = true
+		i.WithIngressNginx = true
 		i.WithKnative = true
-		i.WithCertManager = true
 	}
 
-	// Update the corresponding conditions when WithAsyncRuntime is true
-	if i.WithAsyncRuntime {
-		i.WithDapr = true
-		i.WithKeda = true
+	// Update the corresponding conditions when --without-ci is true
+	if i.WithoutCI {
+		i.WithShipWright = false
 	}
 
-	// Update the corresponding conditions when WithSyncRuntime is true
-	//if i.WithSyncRuntime {
-	//}
-
+	// Update the corresponding conditions
 	if i.OpenFunctionVersion == common.LatestVersion {
-		i.WithCertManager = true
+		i.WithCertManager = false
 	} else {
 		if i.openFunctionVersion.Major() == 0 && i.openFunctionVersion.Minor() == 3 {
-			i.WithIngress = false
 			i.WithCertManager = false
 		}
 
-		if i.openFunctionVersion.Major() == 0 && i.openFunctionVersion.Minor() == 4 {
-			i.WithIngress = false
+		if i.openFunctionVersion.Major() == 0 && i.openFunctionVersion.Minor() >= 4 && i.openFunctionVersion.Minor() <= 6 {
 			i.WithCertManager = true
 		}
 	}
+
+	return nil
 }
 
 func getExistComponentsInventory(ctx context.Context, cl *k8s.Clientset) map[string]bool {

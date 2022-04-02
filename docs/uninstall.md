@@ -5,36 +5,31 @@ This command will help you to uninstall OpenFunction and its dependencies.
 ## Parameters
 
 ```shell
---all                For uninstalling all dependencies.
---async              For uninstalling OpenFunction Async Runtime (Dapr & Keda).
---cert-manager       For uninstalling Cert Manager.
---dapr               For uninstalling Dapr.
---dry-run            Used to prompt for the components and their versions to be uninstalled by the current command.
---ingress            For uninstalling Ingress Nginx.
---keda               For uninstalling KEDA.
---knative            For uninstalling Knative Serving (with Kourier as default gateway).
---region-cn          For users who have limited access to gcr.io or github.com.
---shipwright         For uninstalling ShipWright.
---sync               For uninstalling OpenFunction Sync Runtime (To be supported).
---verbose            Show verbose information.
---yes                Automatic yes to prompts. ('-y' as a short form)
---version string     Used to specify the version of OpenFunction to be uninstalled.
---wait               Awaiting the results of the uninstallation.
---timeout duration   Set timeout time. Default is 5 minutes. (default 5m0s)
+      --all                For uninstalling all dependencies.
+      --dry-run            Used to prompt for the components and their versions to be uninstalled by the current command.
+  -h, --help               help for uninstall
+      --region-cn          For users who have limited access to gcr.io or github.com.
+  -r, --runtime strings    List of runtimes to be uninstalled, optionally "knative", "async". (default [knative])
+      --timeout duration   Set timeout time. Default is 10 minutes. (default 10m0s)
+      --verbose            Show verbose information.
+      --version string     Used to specify the version of OpenFunction to be uninstalled.
+      --wait               Awaiting the results of the uninstallation.
+      --with-ci            For uninstalling the CI components.
+  -y, --yes                Automatic yes to prompts.
 ```
 
 ## Use Cases
 
-### Uninstall a specified runtime of OpenFunction
+### Uninstall specified runtime(s) of OpenFunction
 
 ```shell
-ofn uninstall --async
+ofn uninstall --runtime async
 ```
 
 or
 
 ```shell
-ofn uninstall --knative
+ofn uninstall --runtime knative,async
 ```
 
 ### For users who have limited access to gcr.io or github.com to uninstall OpenFunction

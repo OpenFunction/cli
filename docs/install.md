@@ -5,36 +5,32 @@ This command will help you to install OpenFunction and its dependencies.
 ## Parameters
 
 ```shell
---all                For installing all dependencies.
---async              For installing OpenFunction Async Runtime (Dapr & Keda).
---cert-manager       For installing Cert Manager.
---dapr               For installing Dapr.
---dry-run            Used to prompt for the components and their versions to be installed by the current command.
---ingress            For installing Ingress Nginx.
---keda               For installing Keda.
---knative            For installing Knative Serving (with Kourier as default gateway).
---region-cn          For users who have limited access to gcr.io or github.com.
---shipwright         For installing ShipWright.
---sync               For installing OpenFunction Sync Runtime (To be supported).
---upgrade            Upgrade components to target version while installing.
---yes                Automatic yes to prompts. ('-y' as a short form)
---verbose            Show verbose information.
---version string     Used to specify the version of OpenFunction to be installed. (default "v0.4.0")
---timeout duration   Set timeout time. Default is 5 minutes. (default 5m0s)
+      --all                For installing all dependencies.
+      --dry-run            Used to prompt for the components and their versions to be installed by the current command.
+  -h, --help               help for install
+      --ingress string     The type of ingress controller to be installed, optionally "nginx". (default "nginx")
+      --region-cn          For users who have limited access to gcr.io or github.com.
+  -r, --runtime strings    List of runtimes to be installed, optionally "knative", "async". (default [knative])
+      --timeout duration   Set timeout time. Default is 10 minutes. (default 10m0s)
+      --upgrade            Upgrade components to target version while installing.
+      --verbose            Show verbose information.
+      --version string     Used to specify the version of OpenFunction to be installed.
+      --without-ci         Skip the installation of CI components.
+  -y, --yes                Automatic yes to prompts.
 ```
 
 ## Use Cases
 
-### Install OpenFunction with a specific runtime
+### Install OpenFunction with specific runtime(s)
 
 ```shell
-ofn install --async
+ofn install --runtime async
 ```
 
 or
 
 ```shell
-ofn install --knative
+ofn install --runtime knative,async
 ```
 
 ### Install OpenFunction with limited access to gcr.io or github.com
@@ -71,17 +67,16 @@ The OpenFunction CLI provides a default compatibility matrix based on which Open
 
 The OpenFunction CLI keeps the installed component details in `$home/.ofn/<cluster name>-inventory.yaml`.
 
-| Components             | Kubernetes 1.17 | Kubernetes 1.18 | Kubernetes 1.19 | Kubernetes 1.20+ | CLI Option       | Description                                    |
-| ---------------------- | --------------- | --------------- | --------------- | ---------------- | ---------------- | ---------------------------------------------- |
-| Knative Serving        | 0.21.1          | 0.23.3          | 0.25.2          | 1.0.1            | `--knative`      | The synchronous function runtime               |
-| Kourier                | 0.21.0          | 0.23.0          | 0.25.0          | 1.0.1            | `--knative`      | The default network layer for Knative          |
-| Serving Default Domain | 0.21.0          | 0.23.0          | 0.25.0          | 1.0.1            | `--knative`      | The default DNS layout for Knative             |
-| Dapr                   | 1.5.1           | 1.5.1           | 1.5.1           | 1.5.1            | `--async`        | The distributed application runtime of asynchronous function |
-| Keda                   | 2.4.0           | 2.4.0           | 2.4.0           | 2.4.0            | `--async`        | The autoscaler of asynchronous function runtime|
-| Shipwright             | 0.6.1           | 0.6.1           | 0.6.1           | 0.6.1            | `--shipwright`   | The function build framework                   |
-| Tekton Pipelines       | 0.23.0          | 0.26.0          | 0.29.0          | 0.30.0           | `--shipwright`   | The function build pipeline                    |
-| Cert Manager           | 1.5.4           | 1.5.4           | 1.5.4           | 1.5.4            | `--cert-manager` | OpenFunction webhook Certificate manager (For OpenFunction v0.4.0+ only). |
-| Ingress Nginx          | na              | na              | 1.1.0           | 1.1.0            | `--ingress`      | Function ingress controller (For OpenFunction v0.4.0+ only). |
+| Components             | Kubernetes 1.17 | Kubernetes 1.18 | Kubernetes 1.19 | Kubernetes 1.20+ | CLI Option                                | Description                                                  |
+| ---------------------- | --------------- | --------------- | --------------- | ---------------- | ----------------------------------------- | ------------------------------------------------------------ |
+| Knative Serving        | 0.21.1          | 0.23.3          | 0.25.2          | 1.0.1            | `--runtime knative`, `--with-knative`     | The synchronous function runtime                             |
+| Kourier                | 0.21.0          | 0.23.0          | 0.25.0          | 1.0.1            | `--runtime knative`, `--with-knative`     | The default network layer for Knative                        |
+| Serving Default Domain | 0.21.0          | 0.23.0          | 0.25.0          | 1.0.1            | `--runtime knative`, `--with-knative`     | The default DNS layout for Knative                           |
+| Dapr                   | 1.5.1           | 1.5.1           | 1.5.1           | 1.5.1            | `--runtime async`, `--with-dapr`          | The distributed application runtime of asynchronous function |
+| Keda                   | 2.4.0           | 2.4.0           | 2.4.0           | 2.4.0            | `--runtime async`, `--with-keda`          | The autoscaler of asynchronous function runtime              |
+| Shipwright             | 0.6.1           | 0.6.1           | 0.6.1           | 0.6.1            | `--without-ci`                            | The function build framework                                 |
+| Tekton Pipelines       | 0.23.0          | 0.26.0          | 0.29.0          | 0.30.0           | `--without-ci`                            | The function build pipeline                                  |
+| Ingress Nginx          | na              | na              | 1.1.0           | 1.1.0            | `--ingress nginx`, `--with-ingress-nginx` | Function ingress controller (For OpenFunction v0.4.0+ only). |
 
 > The function ingress capability (i.e. OpenFunction Domain) can only be used in Kubernetes v1.19+.
 
