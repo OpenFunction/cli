@@ -131,7 +131,7 @@ func (i *Demo) RunKind(cl *k8s.Clientset, cmd *cobra.Command) error {
 		true,
 		true,
 		true,
-		false,
+		true,
 		i.OpenFunctionVersion,
 	)
 	if err != nil {
