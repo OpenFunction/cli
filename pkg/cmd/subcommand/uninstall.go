@@ -28,14 +28,14 @@ type Uninstall struct {
 	genericclioptions.IOStreams
 
 	Verbose             bool
+	Runtimes            []string
+	WithCI              bool
 	WithDapr            bool
 	WithKeda            bool
 	WithKnative         bool
 	WithShipWright      bool
 	WithCertManager     bool
-	WithIngress         bool
-	WithAsyncRuntime    bool
-	WithSyncRuntime     bool
+	WithIngressNginx    bool
 	WithAll             bool
 	RegionCN            bool
 	OpenFunctionVersion string
@@ -67,7 +67,7 @@ func NewCmdUninstall(cf *genericclioptions.ConfigFlags, ioStreams genericcliopti
 ofn uninstall --all
 
 # Uninstall a specified runtime of OpenFunction
-ofn uninstall --async
+ofn uninstall --runtime async
 
 # For users who have limited access to gcr.io or github.com to uninstall OpenFunction
 ofn uninstall --region-cn --all
@@ -88,20 +88,18 @@ ofn uninstall --all --version v0.4.0
 			return nil
 		},
 		Run: func(cmd *cobra.Command, args []string) {
-			util.CheckErr(i.ValidateArgs(cmd, args))
+			util.CheckErr(i.ValidateArgs())
 			util.CheckErr(i.RunUninstall(cl, cmd))
 		},
 	}
 
+	cmd.PersistentFlags().StringSliceVarP(&i.Runtimes, "runtime", "r", []string{"knative"}, "List of runtimes to be uninstalled, optionally \"knative\", \"async\".")
 	cmd.Flags().BoolVar(&i.Verbose, "verbose", false, "Show verbose information.")
-	cmd.Flags().BoolVar(&i.WithDapr, "dapr", false, "For uninstalling Dapr.")
-	cmd.Flags().BoolVar(&i.WithKeda, "keda", false, "For uninstalling KEDA.")
-	cmd.Flags().BoolVar(&i.WithKnative, "knative", false, "For uninstalling Knative Serving (with Kourier as default gateway).")
-	cmd.Flags().BoolVar(&i.WithShipWright, "shipwright", false, "For uninstalling ShipWright.")
-	cmd.Flags().BoolVar(&i.WithCertManager, "cert-manager", false, "For uninstalling Cert Manager.")
-	cmd.Flags().BoolVar(&i.WithIngress, "ingress", false, "For uninstalling Ingress Nginx.")
-	cmd.Flags().BoolVar(&i.WithAsyncRuntime, "async", false, "For uninstalling OpenFunction Async Runtime (Dapr & Keda).")
-	cmd.Flags().BoolVar(&i.WithSyncRuntime, "sync", false, "For uninstalling OpenFunction Sync Runtime (To be supported).")
+	cmd.Flags().BoolVar(&i.WithCI, "with-ci", false, "For uninstalling the CI components.")
+	cmd.Flags().BoolVar(&i.WithDapr, "with-dapr", false, "For uninstalling Dapr.")
+	cmd.Flags().BoolVar(&i.WithKeda, "with-keda", false, "For uninstalling KEDA.")
+	cmd.Flags().BoolVar(&i.WithKnative, "with-knative", false, "For uninstalling Knative Serving (with Kourier as default gateway).")
+	cmd.Flags().BoolVar(&i.WithIngressNginx, "with-ingress-nginx", false, "For installing Ingress Nginx.")
 	cmd.Flags().BoolVar(&i.WithAll, "all", false, "For uninstalling all dependencies.")
 	cmd.Flags().BoolVar(&i.RegionCN, "region-cn", false, "For users who have limited access to gcr.io or github.com.")
 	cmd.Flags().BoolVar(&i.DryRun, "dry-run", false, "Used to prompt for the components and their versions to be uninstalled by the current command.")
@@ -112,15 +110,14 @@ ofn uninstall --all --version v0.4.0
 	// In order to avoid too many options causing misunderstandings among users,
 	// we have hidden the following parameters,
 	// but you can still find their usage instructions in the documentation.
-	cmd.Flags().MarkHidden("ingress")
-	cmd.Flags().MarkHidden("cert-manager")
-	cmd.Flags().MarkHidden("shipwright")
-	cmd.Flags().MarkHidden("keda")
-	cmd.Flags().MarkHidden("dapr")
+	cmd.Flags().MarkHidden("with-ingress-nginx")
+	cmd.Flags().MarkHidden("with-keda")
+	cmd.Flags().MarkHidden("with-dapr")
+	cmd.Flags().MarkHidden("with-knative")
 	return cmd
 }
 
-func (i *Uninstall) ValidateArgs(cmd *cobra.Command, args []string) error {
+func (i *Uninstall) ValidateArgs() error {
 	if i.OpenFunctionVersion == common.LatestVersion {
 		return nil
 	}
@@ -183,7 +180,9 @@ func (i *Uninstall) RunUninstall(cl *k8s.Clientset, cmd *cobra.Command) error {
 
 	// Determine which components need to be enabled
 	// and update all options to be consistent.
-	i.mergeConditions()
+	if err := i.calculateConditions(); err != nil {
+		return errors.Wrap(err, "failed to calculate conditions")
+	}
 	inventoryPending, err := inventory.GetInventory(
 		cl,
 		i.RegionCN,
@@ -192,7 +191,7 @@ func (i *Uninstall) RunUninstall(cl *k8s.Clientset, cmd *cobra.Command) error {
 		i.WithDapr,
 		i.WithShipWright,
 		i.WithCertManager,
-		i.WithIngress,
+		i.WithIngressNginx,
 		i.OpenFunctionVersion,
 	)
 	if err != nil {
@@ -296,7 +295,7 @@ func (i *Uninstall) RunUninstall(cl *k8s.Clientset, cmd *cobra.Command) error {
 		}
 	}
 
-	if i.WithIngress {
+	if i.WithIngressNginx {
 		if operator.Records.Ingress != "" {
 			count += 1
 			group.AddSpinner()
@@ -326,26 +325,36 @@ func (i *Uninstall) RunUninstall(cl *k8s.Clientset, cmd *cobra.Command) error {
 	return nil
 }
 
-func (i *Uninstall) mergeConditions() {
+func (i *Uninstall) calculateConditions() error {
+	i.WithCertManager = true
+	i.WithIngressNginx = true
+
+	// Calculate runtime condition
+	for _, rt := range i.Runtimes {
+		switch rt {
+		case "knative":
+			i.WithKnative = true
+		case "async":
+			i.WithDapr = true
+			i.WithKeda = true
+		default:
+			return errors.Errorf("invalid runtime: %s", rt)
+		}
+	}
+
 	// Update the corresponding conditions when WithAll is true
 	if i.WithAll {
 		i.WithDapr = true
 		i.WithKeda = true
-		i.WithIngress = true
 		i.WithKnative = true
 		i.WithShipWright = true
-		i.WithCertManager = true
 	}
 
-	// Update the corresponding conditions when WithAsyncRuntime is true
-	if i.WithAsyncRuntime {
-		i.WithDapr = true
-		i.WithKeda = true
+	if i.WithCI {
+		i.WithShipWright = true
 	}
 
-	// Update the corresponding conditions when WithSyncRuntime is true
-	//if i.WithSyncRuntime {
-	//}
+	return nil
 }
 
 func uninstallDapr(ctx context.Context, spinner *spinners.Spinner, cl *k8s.Clientset, operator *common.Operator, waitForCleared bool) {
@@ -465,28 +474,6 @@ func uninstallShipwright(ctx context.Context, spinner *spinners.Spinner, cl *k8s
 	spinner.Done()
 }
 
-func uninstallTektonPipelines(ctx context.Context, spinner *spinners.Spinner, cl *k8s.Clientset, operator *common.Operator, waitForCleared bool) {
-	ctx, done := context.WithCancel(ctx)
-	defer done()
-
-	spinner.Update("Uninstalling...")
-	yamls, err := operator.Inventory[inventory.TektonPipelinesName].GetYamlFile(operator.Records.TektonPipelines)
-	if err != nil {
-		spinner.Error(errors.Wrap(err, "Failed to get yaml file"))
-		return
-	}
-
-	if err := operator.Uninstall(ctx, cl, yamls["MAIN"], common.TektonPipelineNamespace, false, waitForCleared); err != nil {
-		spinner.Error(errors.Wrap(err, "Failed to uninstall Tekton Pipeline"))
-		return
-	}
-
-	// Reset version to null
-	operator.Records.TektonPipelines = ""
-
-	spinner.Done()
-}
-
 func uninstallCertManager(ctx context.Context, spinner *spinners.Spinner, cl *k8s.Clientset, operator *common.Operator, waitForCleared bool) {
 	ctx, done := context.WithCancel(ctx)
 	defer done()
@@ -505,6 +492,28 @@ func uninstallCertManager(ctx context.Context, spinner *spinners.Spinner, cl *k8
 
 	// Reset version to null
 	operator.Records.CertManager = ""
+
+	spinner.Done()
+}
+
+func uninstallTektonPipelines(ctx context.Context, spinner *spinners.Spinner, cl *k8s.Clientset, operator *common.Operator, waitForCleared bool) {
+	ctx, done := context.WithCancel(ctx)
+	defer done()
+
+	spinner.Update("Uninstalling...")
+	yamls, err := operator.Inventory[inventory.TektonPipelinesName].GetYamlFile(operator.Records.TektonPipelines)
+	if err != nil {
+		spinner.Error(errors.Wrap(err, "Failed to get yaml file"))
+		return
+	}
+
+	if err := operator.Uninstall(ctx, cl, yamls["MAIN"], common.TektonPipelineNamespace, false, waitForCleared); err != nil {
+		spinner.Error(errors.Wrap(err, "Failed to uninstall Tekton Pipeline"))
+		return
+	}
+
+	// Reset version to null
+	operator.Records.TektonPipelines = ""
 
 	spinner.Done()
 }

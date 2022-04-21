@@ -130,7 +130,7 @@ func (i *Demo) RunKind(cf *genericclioptions.ConfigFlags, cmd *cobra.Command) er
 		true,
 		true,
 		true,
-		false,
+		true,
 		i.OpenFunctionVersion,
 	)
 	if err != nil {
