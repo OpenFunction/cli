@@ -11,8 +11,8 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/OpenFunction/cli/pkg/client"
 	"github.com/OpenFunction/cli/pkg/cmd/util"
+	"github.com/OpenFunction/cli/pkg/cmd/util/client"
 	"github.com/OpenFunction/cli/pkg/cmd/util/spinners"
 	"github.com/OpenFunction/cli/pkg/components/common"
 	"github.com/OpenFunction/cli/pkg/components/inventory"
@@ -52,7 +52,7 @@ func NewUninstall(ioStreams genericclioptions.IOStreams) *Uninstall {
 	}
 }
 
-func NewCmdUninstall(restClient util.Getter, ioStreams genericclioptions.IOStreams) *cobra.Command {
+func NewCmdUninstall(cf *genericclioptions.ConfigFlags, ioStreams genericclioptions.IOStreams) *cobra.Command {
 	var cl *k8s.Clientset
 
 	i := NewUninstall(ioStreams)
@@ -81,7 +81,7 @@ ofn uninstall --all --version v0.4.0
 # See more at: https://github.com/OpenFunction/cli/blob/main/docs/uninstall.md
 `,
 		PreRunE: func(cmd *cobra.Command, args []string) (err error) {
-			_, cl, err = client.NewKubeConfigClient()
+			_, cl, err = client.NewKubeConfigClient(cf)
 			if err != nil {
 				return err
 			}

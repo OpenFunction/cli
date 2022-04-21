@@ -9,8 +9,8 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/OpenFunction/cli/pkg/client"
 	"github.com/OpenFunction/cli/pkg/cmd/util"
+	"github.com/OpenFunction/cli/pkg/cmd/util/client"
 	"github.com/OpenFunction/cli/pkg/cmd/util/spinners"
 	"github.com/OpenFunction/cli/pkg/components/common"
 	"github.com/OpenFunction/cli/pkg/components/inventory"
@@ -44,8 +44,7 @@ func NewDemo(ioStreams genericclioptions.IOStreams) *Demo {
 	}
 }
 
-func NewCmdDemo(restClient util.Getter, ioStreams genericclioptions.IOStreams) *cobra.Command {
-	var cl *k8s.Clientset
+func NewCmdDemo(cf *genericclioptions.ConfigFlags, ioStreams genericclioptions.IOStreams) *cobra.Command {
 	i := NewDemo(ioStreams)
 
 	cmd := &cobra.Command{
@@ -59,7 +58,7 @@ func NewCmdDemo(restClient util.Getter, ioStreams genericclioptions.IOStreams) *
 		Example: "ofn demo",
 		Run: func(cmd *cobra.Command, args []string) {
 			util.CheckErr(i.ValidateArgs(cmd, args))
-			util.CheckErr(i.RunKind(cl, cmd))
+			util.CheckErr(i.RunKind(cf, cmd))
 		},
 	}
 
@@ -79,7 +78,7 @@ func (i *Demo) ValidateArgs(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-func (i *Demo) RunKind(cl *k8s.Clientset, cmd *cobra.Command) error {
+func (i *Demo) RunKind(cf *genericclioptions.ConfigFlags, cmd *cobra.Command) error {
 	defer func() {
 		if i.AutoPrune {
 			i.deleteCluster()
@@ -119,7 +118,7 @@ func (i *Demo) RunKind(cl *k8s.Clientset, cmd *cobra.Command) error {
 		return errors.New(util.TaskFail(err.Error()))
 	}
 
-	_, cl, err := client.NewKubeConfigClient()
+	_, cl, err := client.NewKubeConfigClient(cf)
 	if err != nil {
 		return err
 	}

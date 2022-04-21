@@ -3,14 +3,11 @@ package cmd
 import (
 	"flag"
 	"io"
-	"net/http"
 	"os"
 
 	"github.com/OpenFunction/cli/pkg/cmd/subcommand"
-	"github.com/OpenFunction/cli/pkg/cmd/util"
 	"github.com/spf13/cobra"
 	"k8s.io/cli-runtime/pkg/genericclioptions"
-	"k8s.io/client-go/rest"
 	cflg "k8s.io/component-base/cli/flag"
 )
 
@@ -51,36 +48,23 @@ Find more information at:
 	cmd.SetGlobalNormalizationFunc(cflg.WarnWordSepNormalizeFunc)
 
 	ioStreams := genericclioptions.IOStreams{In: in, Out: out, ErrOut: errout}
-	restClient := util.NewRESTClientGetter(kubeConfigFlags)
 
-	cmd.AddCommand(subcommand.NewCmdInit(ioStreams))
-	cmd.AddCommand(subcommand.NewCmdCreate(restClient, ioStreams))
-	cmd.AddCommand(subcommand.NewCmdApply(restClient, ioStreams))
-	cmd.AddCommand(subcommand.NewCmdDelete(restClient, ioStreams))
-	cmd.AddCommand(subcommand.NewCmdGet(restClient, ioStreams))
-	cmd.AddCommand(subcommand.NewCmdInstall(restClient, ioStreams))
-	cmd.AddCommand(subcommand.NewCmdUninstall(restClient, ioStreams))
-	cmd.AddCommand(subcommand.NewCmdDemo(restClient, ioStreams))
+	cmd.AddCommand(subcommand.NewCmdCreate(kubeConfigFlags, ioStreams))
+	cmd.AddCommand(subcommand.NewCmdDelete(kubeConfigFlags, ioStreams))
+	cmd.AddCommand(subcommand.NewCmdGet(kubeConfigFlags, ioStreams))
+	cmd.AddCommand(subcommand.NewCmdInstall(kubeConfigFlags, ioStreams))
+	cmd.AddCommand(subcommand.NewCmdUninstall(kubeConfigFlags, ioStreams))
+	cmd.AddCommand(subcommand.NewCmdDemo(kubeConfigFlags, ioStreams))
 	cmd.AddCommand(subcommand.NewCmdVersion())
 	return cmd
 }
 
 func addCmdHeaderHooks(cmds *cobra.Command, kubeConfigFlags *genericclioptions.ConfigFlags) {
-	crt := &genericclioptions.CommandHeaderRoundTripper{}
-
 	existingPreRunE := cmds.PersistentPreRunE
 	cmds.PersistentPreRunE = func(cmd *cobra.Command, args []string) error {
-		crt.ParseCommandHeaders(cmd, args)
 		if existingPreRunE != nil {
 			return existingPreRunE(cmd, args)
 		}
 		return nil
-	}
-	kubeConfigFlags.WrapConfigFn = func(c *rest.Config) *rest.Config {
-		c.Wrap(func(rt http.RoundTripper) http.RoundTripper {
-			crt.Delegate = rt
-			return crt
-		})
-		return c
 	}
 }

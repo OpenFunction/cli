@@ -3,8 +3,10 @@ package subcommand
 import (
 	"context"
 
-	client "github.com/OpenFunction/cli/pkg/client"
 	"github.com/OpenFunction/cli/pkg/cmd/util"
+	cc "github.com/OpenFunction/cli/pkg/cmd/util/client"
+	client "github.com/openfunction/pkg/client/clientset/versioned"
+	"github.com/openfunction/pkg/client/clientset/versioned/scheme"
 	"github.com/spf13/cobra"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -12,7 +14,8 @@ import (
 	"k8s.io/cli-runtime/pkg/printers"
 	"k8s.io/cli-runtime/pkg/resource"
 
-	openfunction "github.com/openfunction/apis/core/v1alpha1"
+	fn "github.com/openfunction/apis/core/v1beta1"
+	openfunction "github.com/openfunction/apis/core/v1beta1"
 )
 
 // Create is the commandline for 'create' sub command
@@ -28,8 +31,11 @@ type Create struct {
 	Version          string
 	Port             int32
 	ImageCredentials string
-	Build            openfunction.BuildImpl
-	Serving          openfunction.ServingImpl
+	Build            *openfunction.BuildImpl
+	Serving          *openfunction.ServingImpl
+	runtime          string
+
+	namespace string
 
 	options metav1.CreateOptions
 	printer printers.ResourcePrinter
@@ -50,12 +56,14 @@ func NewCreate(ioStreams genericclioptions.IOStreams) *Create {
 	return &Create{
 		IOStreams: ioStreams,
 
-		Printer: util.NewPrinter("create", client.Scheme),
+		Printer: util.NewPrinter("create", scheme.Scheme),
+		Build:   &fn.BuildImpl{},
+		Serving: &fn.ServingImpl{},
 	}
 }
 
-func NewCmdCreate(restClient util.Getter, ioStreams genericclioptions.IOStreams) *cobra.Command {
-	var fc client.FnClient
+func NewCmdCreate(cf *genericclioptions.ConfigFlags, ioStreams genericclioptions.IOStreams) *cobra.Command {
+	var fc client.Interface
 
 	c := NewCreate(ioStreams)
 	cmd := &cobra.Command{
@@ -67,10 +75,19 @@ Create a resource from a file or from stdin
 `,
 		Example: createExample,
 
-		PreRunE: func(cmd *cobra.Command, args []string) (err error) {
-			fc, err = client.NewFnClient(restClient)
+		PreRunE: func(cmd *cobra.Command, args []string) error {
+			config, err := cf.ToRESTConfig()
+			if err != nil {
+				panic(err)
+			}
+			cc.SetConfigDefaults(config)
+			fc = client.NewForConfigOrDie(config)
+
+			c.namespace, _, err = cf.ToRawKubeConfigLoader().Namespace()
+
 			return err
 		},
+
 		Run: func(cmd *cobra.Command, args []string) {
 			util.CheckErr(c.Complete(cmd, args))
 			util.CheckErr(c.Validate(cmd))
@@ -85,9 +102,10 @@ Create a resource from a file or from stdin
 	cmd.Flags().StringVarP(&c.ImageCredentials, "image-credentials", "", c.ImageCredentials, "ImageCredentials references a Secret that contains credentials to access the image repository")
 	cmd.Flags().Int32VarP(&c.Port, "port", "", c.Port, "The port on which the function will be invoked")
 	cmd.Flags().BoolVarP(&c.DryRun, "dry-run", "", c.DryRun, "Only print the object that would be sent, without sending it")
+	cmd.Flags().StringVarP(&c.runtime, "runtime", "", "", "The configuration of the backend runtime for running function.")
 	c.Printer.AddFlags(cmd)
-	AddBuild(cmd, &c.Build)
-	AddServing(cmd, &c.Serving)
+	AddBuild(cmd, c.Build)
+	AddServing(cmd, c.Serving)
 	return cmd
 }
 
@@ -108,6 +126,18 @@ func (c *Create) Complete(cmd *cobra.Command, args []string) error {
 	c.printer, err = c.Printer.ToPrinter()
 	if err != nil {
 		return err
+	}
+
+	if c.runtime == "" {
+		c.Serving = nil
+	} else {
+		c.Serving.Runtime = openfunction.Runtime(c.runtime)
+	}
+
+	if c.Build != nil {
+		if c.Build.SrcRepo.Credentials.Name == "" {
+			c.Build.SrcRepo.Credentials = nil
+		}
 	}
 	return nil
 }
@@ -130,7 +160,7 @@ func (c *Create) Validate(cmd *cobra.Command) error {
 	return nil
 }
 
-func (c *Create) RunCreate(fc client.FnClient, cmd *cobra.Command, args []string) error {
+func (c *Create) RunCreate(fc client.Interface, cmd *cobra.Command, args []string) error {
 	var (
 		fns []*openfunction.Function
 		err error
@@ -148,8 +178,9 @@ func (c *Create) RunCreate(fc client.FnClient, cmd *cobra.Command, args []string
 				ImageCredentials: &corev1.LocalObjectReference{
 					Name: c.ImageCredentials,
 				},
-				Build:   &c.Build,
-				Serving: &c.Serving,
+				Port:    &c.Port,
+				Build:   c.Build,
+				Serving: c.Serving,
 			},
 		},
 		}
@@ -174,13 +205,17 @@ func (c *Create) RunCreate(fc client.FnClient, cmd *cobra.Command, args []string
 	return nil
 }
 
-func (c *Create) create(fc client.FnClient, cmd *cobra.Command, fn *openfunction.Function) (*openfunction.Function, error) {
+func (c *Create) create(fc client.Interface, cmd *cobra.Command, fn *openfunction.Function) (*openfunction.Function, error) {
 	opt := metav1.CreateOptions{}
 	if c.DryRun {
 		opt.DryRun = []string{metav1.DryRunAll}
 	}
 
-	result, err := fc.Namespace(fn.Namespace).Create(context.Background(), fn, opt)
+	if fn.Namespace == "" {
+		fn.Namespace = c.namespace
+	}
+
+	result, err := fc.CoreV1beta1().Functions(fn.Namespace).Create(context.Background(), fn, opt)
 	if err != nil {
 		return nil, err
 	}

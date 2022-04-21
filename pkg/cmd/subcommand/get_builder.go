@@ -4,14 +4,17 @@ import (
 	"context"
 	"fmt"
 
-	client "github.com/OpenFunction/cli/pkg/client"
 	"github.com/OpenFunction/cli/pkg/cmd/util"
+	cc "github.com/OpenFunction/cli/pkg/cmd/util/client"
+	client "github.com/openfunction/pkg/client/clientset/versioned"
+	scheme "github.com/openfunction/pkg/client/clientset/versioned/scheme"
 	"github.com/spf13/cobra"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/cli-runtime/pkg/genericclioptions"
 
-	openfunction "github.com/openfunction/apis/core/v1alpha1"
+	"github.com/openfunction/apis/core/v1beta1"
+	openfunction "github.com/openfunction/apis/core/v1beta1"
 )
 
 type getBuilder struct {
@@ -21,6 +24,9 @@ type getBuilder struct {
 
 	Name              string
 	NamespaceIfScoped bool
+
+	namespace        string
+	enforceNamespace bool
 }
 
 const (
@@ -57,12 +63,12 @@ func newGetBuiler(ioStreams genericclioptions.IOStreams) *getBuilder {
 	return &getBuilder{
 		IOStreams: ioStreams,
 
-		Printer: util.NewPrinter("get-builder", client.Scheme),
+		Printer: util.NewPrinter("get-builder", scheme.Scheme),
 	}
 }
 
-func newCmdGetBuilder(restClient util.Getter, ioStreams genericclioptions.IOStreams) *cobra.Command {
-	var fc client.FnClient
+func newCmdGetBuilder(cf *genericclioptions.ConfigFlags, ioStreams genericclioptions.IOStreams) *cobra.Command {
+	var fc client.Interface
 
 	g := newGetBuiler(ioStreams)
 	cmd := &cobra.Command{
@@ -71,10 +77,18 @@ func newCmdGetBuilder(restClient util.Getter, ioStreams genericclioptions.IOStre
 		Short:                 "Display one or many builder",
 		Long:                  getBuildLong,
 		Example:               getbulderExample,
-		PreRunE: func(cmd *cobra.Command, args []string) (err error) {
-			fc, err = client.NewFnClient(restClient)
+		PreRunE: func(cmd *cobra.Command, args []string) error {
+			config, err := cf.ToRESTConfig()
+			if err != nil {
+				panic(err)
+			}
+			cc.SetConfigDefaults(config)
+			fc = client.NewForConfigOrDie(config)
+
+			g.namespace, g.enforceNamespace, err = cf.ToRawKubeConfigLoader().Namespace()
 			return err
 		},
+
 		Run: func(cmd *cobra.Command, args []string) {
 			util.CheckErr(g.Complete(cmd, args))
 			util.CheckErr(g.Run(fc, cmd, args))
@@ -92,12 +106,16 @@ func (g *getBuilder) Complete(cmd *cobra.Command, args []string) error {
 		g.Name = args[0]
 		g.Printer.SetForceDefail()
 	}
-	g.NamespaceIfScoped = !g.listFlag.AllNamespaces
+
+	g.NamespaceIfScoped = true
+	if !g.enforceNamespace {
+		g.NamespaceIfScoped = !g.AllNamespaces
+	}
 
 	return nil
 }
 
-func (g *getBuilder) Run(fc client.FnClient, cmd *cobra.Command, args []string) error {
+func (g *getBuilder) Run(fc client.Interface, cmd *cobra.Command, args []string) error {
 	var (
 		objs []runtime.Object
 		obj  runtime.Object
@@ -106,17 +124,24 @@ func (g *getBuilder) Run(fc client.FnClient, cmd *cobra.Command, args []string) 
 
 	ctx := context.Background()
 	if g.Name != "" {
-		obj, err = fc.GetBuilder(ctx, g.Name, metav1.GetOptions{})
+		obj, err = fc.CoreV1beta1().Builders(g.namespace).Get(ctx, g.Name, metav1.GetOptions{})
 		objs = []runtime.Object{obj}
 	} else {
-		options := g.listFlag.ToOptions()
-		builderList, err := fc.ListBuilder(ctx, g.NamespaceIfScoped, options)
+		opt := g.listFlag.ToOptions()
+		result := &v1beta1.BuilderList{}
+		err := fc.CoreV1beta1().RESTClient().
+			Get().
+			NamespaceIfScoped(g.namespace, g.NamespaceIfScoped).
+			Resource("builders").
+			VersionedParams(&opt, scheme.ParameterCodec).
+			Do(ctx).
+			Into(result)
 		if err != nil {
 			return err
 		}
-		objs = make([]runtime.Object, 0, len(builderList.Items))
-		for i := range builderList.Items {
-			objs = append(objs, &builderList.Items[i])
+		objs = make([]runtime.Object, 0, len(result.Items))
+		for i := range result.Items {
+			objs = append(objs, &result.Items[i])
 		}
 
 		if util.IsToTable(g.Printer) {

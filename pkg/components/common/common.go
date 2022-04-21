@@ -67,10 +67,10 @@ func NewOperator(os, arch, version string, timeout time.Duration, inRegionCN boo
 		timeout:    timeout,
 	}
 
-	if arch != "amd64" {
-		fmt.Fprint(ospkg.Stderr, "unsupported arch: ", arch)
-		ospkg.Exit(1)
-	}
+	// if arch != "amd64" {
+	// 	fmt.Fprint(ospkg.Stderr, "unsupported arch: ", arch)
+	// 	ospkg.Exit(1)
+	// }
 
 	switch os {
 	case "linux", "darwin":

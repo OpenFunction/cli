@@ -4,9 +4,12 @@ import (
 	"context"
 	"fmt"
 
-	client "github.com/OpenFunction/cli/pkg/client"
 	"github.com/OpenFunction/cli/pkg/cmd/util"
-	openfunction "github.com/openfunction/apis/core/v1alpha1"
+	cc "github.com/OpenFunction/cli/pkg/cmd/util/client"
+	"github.com/openfunction/apis/core/v1beta1"
+	openfunction "github.com/openfunction/apis/core/v1beta1"
+	client "github.com/openfunction/pkg/client/clientset/versioned"
+	scheme "github.com/openfunction/pkg/client/clientset/versioned/scheme"
 	"github.com/spf13/cobra"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -20,6 +23,9 @@ type getServing struct {
 
 	Name              string
 	NamespaceIfScoped bool
+
+	namespace        string
+	enforceNamespace bool
 }
 
 const (
@@ -56,12 +62,12 @@ func newGetServing(ioStreams genericclioptions.IOStreams) *getServing {
 	return &getServing{
 		IOStreams: ioStreams,
 
-		Printer: util.NewPrinter("get-serving", client.Scheme),
+		Printer: util.NewPrinter("get-serving", scheme.Scheme),
 	}
 }
 
-func newCmdGetServing(restClient util.Getter, ioStreams genericclioptions.IOStreams) *cobra.Command {
-	var fc client.FnClient
+func newCmdGetServing(cf *genericclioptions.ConfigFlags, ioStreams genericclioptions.IOStreams) *cobra.Command {
+	var fc client.Interface
 
 	g := newGetServing(ioStreams)
 	cmd := &cobra.Command{
@@ -70,8 +76,15 @@ func newCmdGetServing(restClient util.Getter, ioStreams genericclioptions.IOStre
 		Short:                 "Display one or many serving",
 		Long:                  getServingLong,
 		Example:               getServingExample,
-		PreRunE: func(cmd *cobra.Command, args []string) (err error) {
-			fc, err = client.NewFnClient(restClient)
+		PreRunE: func(cmd *cobra.Command, args []string) error {
+			config, err := cf.ToRESTConfig()
+			if err != nil {
+				panic(err)
+			}
+			cc.SetConfigDefaults(config)
+			fc = client.NewForConfigOrDie(config)
+
+			g.namespace, g.enforceNamespace, err = cf.ToRawKubeConfigLoader().Namespace()
 			return err
 		},
 		Run: func(cmd *cobra.Command, args []string) {
@@ -91,12 +104,15 @@ func (g *getServing) Complete(cmd *cobra.Command, args []string) error {
 		g.Name = args[0]
 		g.Printer.SetForceDefail()
 	}
-	g.NamespaceIfScoped = !g.listFlag.AllNamespaces
+	g.NamespaceIfScoped = true
+	if !g.enforceNamespace {
+		g.NamespaceIfScoped = !g.AllNamespaces
+	}
 
 	return nil
 }
 
-func (g *getServing) Run(fc client.FnClient, cmd *cobra.Command, args []string) error {
+func (g *getServing) Run(fc client.Interface, cmd *cobra.Command, args []string) error {
 	var (
 		objs []runtime.Object
 		obj  runtime.Object
@@ -105,17 +121,24 @@ func (g *getServing) Run(fc client.FnClient, cmd *cobra.Command, args []string) 
 
 	ctx := context.Background()
 	if g.Name != "" {
-		obj, err = fc.GetServing(ctx, g.Name, metav1.GetOptions{})
+		obj, err = fc.CoreV1beta1().Servings(g.namespace).Get(ctx, g.Name, metav1.GetOptions{})
 		objs = []runtime.Object{obj}
 	} else {
-		options := g.listFlag.ToOptions()
-		servingList, err := fc.ListServing(ctx, g.NamespaceIfScoped, options)
+		opt := g.listFlag.ToOptions()
+		result := &v1beta1.ServingList{}
+		err := fc.CoreV1beta1().RESTClient().
+			Get().
+			NamespaceIfScoped(g.namespace, g.NamespaceIfScoped).
+			Resource("servings").
+			VersionedParams(&opt, scheme.ParameterCodec).
+			Do(ctx).
+			Into(result)
 		if err != nil {
 			return err
 		}
-		objs = make([]runtime.Object, 0, len(servingList.Items))
-		for i := range servingList.Items {
-			objs = append(objs, &servingList.Items[i])
+		objs = make([]runtime.Object, 0, len(result.Items))
+		for i := range result.Items {
+			objs = append(objs, &result.Items[i])
 		}
 
 		if util.IsToTable(g.Printer) {
@@ -151,10 +174,6 @@ func servingRow(obj interface{}) (metav1.TableRow, error) {
 
 	name := serving.Name
 	namespace := serving.Namespace
-	var rt openfunction.Runtime
-	if serving.Spec.Runtime != nil {
-		rt = *serving.Spec.Runtime
-	}
 	phase := serving.Status.Phase
 	state := serving.Status.State
 	resourceRef := gerSeringResourceRef(serving.Status.ResourceRef)
@@ -167,7 +186,7 @@ func servingRow(obj interface{}) (metav1.TableRow, error) {
 	row.Cells = append(row.Cells,
 		name,
 		namespace,
-		rt,
+		serving.Spec.Runtime,
 		resourceRef,
 		phase,
 		state,
