@@ -4,14 +4,17 @@ import (
 	"context"
 	"fmt"
 
-	client "github.com/OpenFunction/cli/pkg/client"
 	"github.com/OpenFunction/cli/pkg/cmd/util"
+	cc "github.com/OpenFunction/cli/pkg/cmd/util/client"
+	client "github.com/openfunction/pkg/client/clientset/versioned"
+	scheme "github.com/openfunction/pkg/client/clientset/versioned/scheme"
 	"github.com/spf13/cobra"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/cli-runtime/pkg/genericclioptions"
 
-	openfunction "github.com/openfunction/apis/core/v1alpha1"
+	"github.com/openfunction/apis/core/v1beta1"
+	openfunction "github.com/openfunction/apis/core/v1beta1"
 )
 
 // Get is the commandline for 'get' sub command
@@ -22,6 +25,9 @@ type Get struct {
 
 	Name              string
 	NamespaceIfScoped bool
+
+	namespace        string
+	enforceNamespace bool
 }
 
 const (
@@ -60,12 +66,12 @@ func NewGet(ioStreams genericclioptions.IOStreams) *Get {
 	return &Get{
 		IOStreams: ioStreams,
 
-		Printer: util.NewPrinter("get", client.Scheme),
+		Printer: util.NewPrinter("get", scheme.Scheme),
 	}
 }
 
-func NewCmdGet(restClient util.Getter, ioStreams genericclioptions.IOStreams) *cobra.Command {
-	var fc client.FnClient
+func NewCmdGet(cf *genericclioptions.ConfigFlags, ioStreams genericclioptions.IOStreams) *cobra.Command {
+	var fc client.Interface
 
 	g := NewGet(ioStreams)
 	cmd := &cobra.Command{
@@ -74,10 +80,19 @@ func NewCmdGet(restClient util.Getter, ioStreams genericclioptions.IOStreams) *c
 		Short:                 "Display one or many function",
 		Long:                  getLong,
 		Example:               getExample,
-		PreRunE: func(cmd *cobra.Command, args []string) (err error) {
-			fc, err = client.NewFnClient(restClient)
+
+		PreRunE: func(cmd *cobra.Command, args []string) error {
+			config, err := cf.ToRESTConfig()
+			if err != nil {
+				panic(err)
+			}
+			cc.SetConfigDefaults(config)
+			fc = client.NewForConfigOrDie(config)
+
+			g.namespace, g.enforceNamespace, err = cf.ToRawKubeConfigLoader().Namespace()
 			return err
 		},
+
 		Run: func(cmd *cobra.Command, args []string) {
 			util.CheckErr(g.Complete(cmd, args))
 			util.CheckErr(g.Run(fc, cmd, args))
@@ -87,8 +102,8 @@ func NewCmdGet(restClient util.Getter, ioStreams genericclioptions.IOStreams) *c
 	g.Printer.AddFlags(cmd)
 	g.listFlag.addListFlag(cmd)
 
-	cmd.AddCommand(newCmdGetBuilder(restClient, ioStreams))
-	cmd.AddCommand(newCmdGetServing(restClient, ioStreams))
+	cmd.AddCommand(newCmdGetBuilder(cf, ioStreams))
+	cmd.AddCommand(newCmdGetServing(cf, ioStreams))
 	return cmd
 }
 
@@ -98,12 +113,14 @@ func (g *Get) Complete(cmd *cobra.Command, args []string) error {
 		g.Printer.SetForceDefail()
 	}
 
-	g.NamespaceIfScoped = !g.AllNamespaces
+	if !g.enforceNamespace {
+		g.NamespaceIfScoped = !g.AllNamespaces
+	}
 
 	return nil
 }
 
-func (g *Get) Run(fc client.FnClient, cmd *cobra.Command, args []string) error {
+func (g *Get) Run(fc client.Interface, cmd *cobra.Command, args []string) error {
 	var (
 		objs []runtime.Object
 		obj  runtime.Object
@@ -112,18 +129,26 @@ func (g *Get) Run(fc client.FnClient, cmd *cobra.Command, args []string) error {
 
 	ctx := context.Background()
 	if g.Name != "" {
-		obj, err = fc.Get(ctx, g.Name, metav1.GetOptions{})
+		obj, err = fc.CoreV1beta1().Functions(g.namespace).Get(ctx, g.Name, metav1.GetOptions{})
 		objs = []runtime.Object{obj}
 	} else {
-		options := g.listFlag.ToOptions()
-		fnList, err := fc.List(ctx, g.NamespaceIfScoped, options)
+		opt := g.listFlag.ToOptions()
+
+		result := &v1beta1.FunctionList{}
+		err := fc.CoreV1beta1().RESTClient().
+			Get().
+			NamespaceIfScoped(g.namespace, g.NamespaceIfScoped).
+			Resource("functions").
+			VersionedParams(&opt, scheme.ParameterCodec).
+			Do(ctx).
+			Into(result)
 		if err != nil {
 			return err
 		}
 
-		objs = make([]runtime.Object, 0, len(fnList.Items))
-		for i := range fnList.Items {
-			objs = append(objs, &fnList.Items[i])
+		objs = make([]runtime.Object, 0, len(result.Items))
+		for i := range result.Items {
+			objs = append(objs, &result.Items[i])
 		}
 
 		if util.IsToTable(g.Printer) {

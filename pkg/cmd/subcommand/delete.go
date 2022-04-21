@@ -4,14 +4,17 @@ import (
 	"context"
 	"fmt"
 
-	client "github.com/OpenFunction/cli/pkg/client"
 	"github.com/OpenFunction/cli/pkg/cmd/util"
+	cc "github.com/OpenFunction/cli/pkg/cmd/util/client"
+	client "github.com/openfunction/pkg/client/clientset/versioned"
+	"github.com/openfunction/pkg/client/clientset/versioned/scheme"
 	"github.com/spf13/cobra"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/cli-runtime/pkg/genericclioptions"
 	"k8s.io/cli-runtime/pkg/resource"
 
-	openfunction "github.com/openfunction/apis/core/v1alpha1"
+	"github.com/openfunction/apis/core/v1beta1"
+	openfunction "github.com/openfunction/apis/core/v1beta1"
 )
 
 // Delete is the commandline for 'delete' sub command
@@ -24,6 +27,9 @@ type Delete struct {
 	atlas             []atlas
 	options           metav1.DeleteOptions
 	NamespaceIfScoped bool
+
+	namespace        string
+	enforceNamespace bool
 }
 
 const (
@@ -46,8 +52,8 @@ func NewDelete(ioStreams genericclioptions.IOStreams) *Delete {
 	}
 }
 
-func NewCmdDelete(restClient util.Getter, ioStreams genericclioptions.IOStreams) *cobra.Command {
-	var fc client.FnClient
+func NewCmdDelete(cf *genericclioptions.ConfigFlags, ioStreams genericclioptions.IOStreams) *cobra.Command {
+	var fc client.Interface
 
 	d := NewDelete(ioStreams)
 	cmd := &cobra.Command{
@@ -58,10 +64,19 @@ func NewCmdDelete(restClient util.Getter, ioStreams genericclioptions.IOStreams)
 Delete funtion by file names, stdin and names, or by resources
 `,
 		Example: deleteExample,
-		PreRunE: func(cmd *cobra.Command, args []string) (err error) {
-			fc, err = client.NewFnClient(restClient)
+
+		PreRunE: func(cmd *cobra.Command, args []string) error {
+			config, err := cf.ToRESTConfig()
+			if err != nil {
+				panic(err)
+			}
+			cc.SetConfigDefaults(config)
+			fc = client.NewForConfigOrDie(config)
+
+			d.namespace, d.enforceNamespace, err = cf.ToRawKubeConfigLoader().Namespace()
 			return err
 		},
+
 		Run: func(cmd *cobra.Command, args []string) {
 			util.CheckErr(d.Validate(cmd, args))
 			util.CheckErr(d.Complete(fc, cmd, args))
@@ -76,17 +91,18 @@ Delete funtion by file names, stdin and names, or by resources
 	return cmd
 }
 
-func (d *Delete) Complete(fc client.FnClient, cmd *cobra.Command, args []string) (err error) {
+func (d *Delete) Complete(fc client.Interface, cmd *cobra.Command, args []string) (err error) {
 	d.atlas = make([]atlas, 0)
 	switch {
 	case len(args) != 0:
 		for _, name := range args {
 			d.atlas = append(d.atlas, atlas{
-				Name: name,
+				Name:      name,
+				Namespace: d.namespace,
 			})
 		}
 	case len(d.FilenameOptions.Filenames) != 0:
-		as, err := getAtlasFromFileOpntion(cmd, d.FilenameOptions)
+		as, err := getAtlasFromFileOpntion(cmd, d.FilenameOptions, d.namespace)
 		if err != nil {
 			return err
 		}
@@ -113,14 +129,14 @@ func (d *Delete) Validate(cmd *cobra.Command, args []string) error {
 	return d.deleteFlag.Validate(cmd)
 }
 
-func (d *Delete) Run(fc client.FnClient, cmd *cobra.Command) (err error) {
+func (d *Delete) Run(fc client.Interface, cmd *cobra.Command) (err error) {
 	var out string
 	if d.DryRun {
 		out = "deleted(dry run)"
 	}
 
 	for _, as := range d.atlas {
-		err := fc.Namespace(as.Namespace).Delete(context.Background(), as.Name, d.options)
+		err := fc.CoreV1beta1().Functions(as.Namespace).Delete(context.Background(), as.Name, d.options)
 		if err != nil {
 			return err
 		}
@@ -136,17 +152,20 @@ type atlas struct {
 	Namespace string
 }
 
-func getAtlasFromFileOpntion(cmd *cobra.Command, fo resource.FilenameOptions) ([]atlas, error) {
+func getAtlasFromFileOpntion(cmd *cobra.Command, fo resource.FilenameOptions, namespace string) ([]atlas, error) {
 	fns, err := getFromFilenameOptions(cmd, fo)
 	if err != nil {
 		return nil, err
 	}
-	return functionListToAtlas(fns), nil
+	return functionListToAtlas(fns, namespace), nil
 }
 
-func functionListToAtlas(fns []*openfunction.Function) []atlas {
+func functionListToAtlas(fns []*openfunction.Function, namespace string) []atlas {
 	as := make([]atlas, 0, len(fns))
 	for _, fn := range fns {
+		if fn.Namespace == "" {
+			fn.Namespace = namespace
+		}
 		as = append(as, toAtlas(fn.ObjectMeta))
 	}
 	return as
@@ -159,13 +178,20 @@ func toAtlas(obj metav1.ObjectMeta) atlas {
 	}
 }
 
-func (d *Delete) listAtlas(fc client.FnClient) ([]atlas, error) {
+func (d *Delete) listAtlas(fc client.Interface) ([]atlas, error) {
 	options := metav1.ListOptions{
 		LabelSelector: d.deleteFlag.LabelSelector,
 		FieldSelector: d.deleteFlag.FieldSelector,
 	}
 
-	fnList, err := fc.List(context.Background(), d.NamespaceIfScoped, options)
+	fnList := &v1beta1.FunctionList{}
+	err := fc.CoreV1beta1().RESTClient().
+		Get().
+		NamespaceIfScoped(d.namespace, d.NamespaceIfScoped).
+		Resource("functions").
+		VersionedParams(&options, scheme.ParameterCodec).
+		Do(context.Background()).
+		Into(fnList)
 	if err != nil {
 		return nil, err
 	}

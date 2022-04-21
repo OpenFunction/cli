@@ -15,8 +15,8 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/OpenFunction/cli/pkg/client"
 	"github.com/OpenFunction/cli/pkg/cmd/util"
+	"github.com/OpenFunction/cli/pkg/cmd/util/client"
 	"github.com/OpenFunction/cli/pkg/cmd/util/spinners"
 	"github.com/OpenFunction/cli/pkg/components/common"
 	"github.com/OpenFunction/cli/pkg/components/inventory"
@@ -63,7 +63,7 @@ func NewInstall(ioStreams genericclioptions.IOStreams) *Install {
 	}
 }
 
-func NewCmdInstall(restClient util.Getter, ioStreams genericclioptions.IOStreams) *cobra.Command {
+func NewCmdInstall(cf *genericclioptions.ConfigFlags, ioStreams genericclioptions.IOStreams) *cobra.Command {
 	var cl *k8s.Clientset
 
 	i := NewInstall(ioStreams)
@@ -89,7 +89,7 @@ ofn install --all --version v0.4.0
 # See more at: https://github.com/OpenFunction/cli/blob/main/docs/install.md
 `,
 		PreRunE: func(cmd *cobra.Command, args []string) (err error) {
-			_, cl, err = client.NewKubeConfigClient()
+			_, cl, err = client.NewKubeConfigClient(cf)
 			if err != nil {
 				return err
 			}

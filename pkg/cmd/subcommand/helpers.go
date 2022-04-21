@@ -3,10 +3,11 @@ package subcommand
 import (
 	"strings"
 
-	client "github.com/OpenFunction/cli/pkg/client"
-	fn "github.com/openfunction/apis/core/v1alpha1"
+	fn "github.com/openfunction/apis/core/v1beta1"
+	"github.com/openfunction/pkg/client/clientset/versioned/scheme"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
+	v1 "k8s.io/api/core/v1"
 	metav1beta1 "k8s.io/apimachinery/pkg/apis/meta/v1beta1"
 	"k8s.io/cli-runtime/pkg/genericclioptions"
 	"k8s.io/cli-runtime/pkg/resource"
@@ -14,7 +15,7 @@ import (
 
 func getFromFilenameOptions(cmd *cobra.Command, filenameOptions resource.FilenameOptions) ([]*fn.Function, error) {
 	r := resource.NewLocalBuilder().
-		WithScheme(client.Scheme, fn.GroupVersion).
+		WithScheme(scheme.Scheme, fn.GroupVersion).
 		ContinueOnError().
 		FilenameParam(false, &filenameOptions).
 		Do()
@@ -47,6 +48,7 @@ func AddBuild(cmd *cobra.Command, builder *fn.BuildImpl) {
 	var builderStr string
 	builder.Builder = &builderStr
 	cmd.Flags().StringVarP(builder.Builder, "builder", "", *builder.Builder, "Cloud Native Buildpacks builders")
+	cmd.Flags().StringToStringVarP(&builder.Env, "env", "", nil, "Environment variables to pass to the builder.")
 	builder.SrcRepo = &fn.GitRepo{}
 	builder.SrcRepo.Init()
 	AddGitRepo(cmd, builder.SrcRepo)
@@ -56,12 +58,18 @@ func AddGitRepo(cmd *cobra.Command, gitRepo *fn.GitRepo) {
 	cmd.Flags().StringVarP(&gitRepo.Url, "git-repo-url", "", gitRepo.Url, "Git url to clone")
 	gitRepo.SourceSubPath = new(string)
 	cmd.Flags().StringVarP(gitRepo.SourceSubPath, "git-repo-source-sub-path", "", *gitRepo.SourceSubPath, "A subpath within the `source` input where the source to build is located")
+	cmd.Flags().StringVarP(gitRepo.Revision, "git-repo-revision", "", *gitRepo.Revision, `Git revision to check out (branch, tag, sha, ref…) (default:"")`)
 }
 
 func AddServing(cmd *cobra.Command, serving *fn.ServingImpl) {
-	var runtime string
-	serving.Runtime = (*fn.Runtime)(&runtime)
-	cmd.Flags().StringVarP(&runtime, "runtime", "", runtime, "Cloud Native Buildpacks builders")
+	serving.Template = &v1.PodSpec{}
+	if len(serving.Template.Containers) == 0 {
+		serving.Template.Containers = make([]v1.Container, 0)
+	}
+	serving.Template.Containers = append(serving.Template.Containers, v1.Container{
+		Name:            "function",
+		ImagePullPolicy: "Always",
+	})
 }
 
 func AddFilenameOptionFlags(cmd *cobra.Command, options *resource.FilenameOptions, usage string) {
