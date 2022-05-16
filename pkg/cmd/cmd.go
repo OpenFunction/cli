@@ -30,7 +30,7 @@ func NewCommand(in io.Reader, out, errout io.Writer) *cobra.Command {
 ofn controller the openfunction manager.
 
 Find more information at:
-    https://https://github.com/OpenFunction/OpenFunction/blob/main/README.md
+    https://github.com/OpenFunction/OpenFunction/blob/main/README.md
 `,
 		Run: func(cmd *cobra.Command, args []string) {
 			cmd.Help()
