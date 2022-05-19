@@ -52,6 +52,7 @@ Find more information at:
 	cmd.AddCommand(subcommand.NewCmdCreate(kubeConfigFlags, ioStreams))
 	cmd.AddCommand(subcommand.NewCmdDelete(kubeConfigFlags, ioStreams))
 	cmd.AddCommand(subcommand.NewCmdGet(kubeConfigFlags, ioStreams))
+	cmd.AddCommand(subcommand.NewCmdLogs(kubeConfigFlags, ioStreams))
 	cmd.AddCommand(subcommand.NewCmdInstall(kubeConfigFlags, ioStreams))
 	cmd.AddCommand(subcommand.NewCmdUninstall(kubeConfigFlags, ioStreams))
 	cmd.AddCommand(subcommand.NewCmdDemo(kubeConfigFlags, ioStreams))
