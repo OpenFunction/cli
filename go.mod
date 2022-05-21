@@ -10,6 +10,7 @@ require (
 	github.com/oliveagle/jsonpath v0.0.0-20180606110733-2e52cf6e6852
 	github.com/openfunction v0.0.0-00010101000000-000000000000
 	github.com/pkg/errors v0.9.1
+	github.com/shipwright-io/build v0.6.0
 	github.com/spf13/cobra v1.2.1
 	github.com/spf13/pflag v1.0.5
 	gopkg.in/yaml.v2 v2.4.0
