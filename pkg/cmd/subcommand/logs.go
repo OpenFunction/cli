@@ -155,6 +155,9 @@ func (l *Logs) run() error {
 	if f.Status.Serving != nil {
 		serving := f.Status.Serving.ResourceRef
 
+		if l.containerName == "" {
+			l.containerName = "function"
+		}
 		err := l.logsForPods(ctx, metav1.ListOptions{LabelSelector: fmt.Sprintf("openfunction.io/serving=%s", serving)})
 		if err != nil {
 			return err
