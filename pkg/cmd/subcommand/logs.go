@@ -136,19 +136,21 @@ func (l *Logs) run() error {
 
 		// get shipwright builder-buildrun
 		swbuildrunRef := builder.Status.ResourceRef["shipwright.io/buildRun"]
-		swBuildRun, err := l.swClient.ShipwrightV1alpha1().BuildRuns(f.Namespace).Get(ctx, swbuildrunRef, metav1.GetOptions{})
-		if err != nil {
-			statusError, ok := err.(*k8serrors.StatusError)
-			// buildrun has been cleaned up
-			if !ok || statusError.Status().Code != 404 {
+		if swbuildrunRef != "" {
+			swBuildRun, err := l.swClient.ShipwrightV1alpha1().BuildRuns(f.Namespace).Get(ctx, swbuildrunRef, metav1.GetOptions{})
+			if err != nil {
+				statusError, ok := err.(*k8serrors.StatusError)
+				// buildrun has been cleaned up
+				if !ok || statusError.Status().Code != 404 {
+					return err
+				}
+			}
+			err = l.logsForPods(ctx, metav1.ListOptions{LabelSelector: fmt.Sprintf("buildrun.shipwright.io/name=%s", swBuildRun.Name)})
+			if err != nil {
 				return err
 			}
 		}
 
-		err = l.logsForPods(ctx, metav1.ListOptions{LabelSelector: fmt.Sprintf("buildrun.shipwright.io/name=%s", swBuildRun.Name)})
-		if err != nil {
-			return err
-		}
 	}
 
 	// Serving stage
