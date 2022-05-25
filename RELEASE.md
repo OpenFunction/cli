@@ -4,12 +4,13 @@ This page describes the release process and the currently planned schedule for u
 
 ## Release schedule
 
-| release series | date  (year-month-day) | release shepherd                            |
-|----------------|--------------------------------------------|---------------------------------------------|
-| v0.5.0          | 2021-12-21                           | Laminar (GitHub: @tpiperatgod) |
-| v0.5.1          | 2021-12-22                           | Laminar (GitHub: @tpiperatgod) |
-| v0.5.2          | 2022-01-03                           | Laminar (GitHub: @tpiperatgod) |
-| v0.5.3          | 2022-02-14                           | Laminar (GitHub: @tpiperatgod) |
+| release series | date  (year-month-day) | release shepherd                 |
+|----------------|------------------------|----------------------------------|
+| v0.5.0         | 2021-12-21             | Laminar (GitHub: @tpiperatgod)   |
+| v0.5.1         | 2021-12-22             | Laminar (GitHub: @tpiperatgod)   |
+| v0.5.2         | 2022-01-03             | Laminar (GitHub: @tpiperatgod)   |
+| v0.5.3         | 2022-02-14             | Laminar (GitHub: @tpiperatgod)   |
+| v0.6.0-rc.0    | 2022-05-25             | Wrongerror (GitHub: @wrongerror) |
 
 # How to cut a new release
 
