@@ -50,3 +50,17 @@
 `[BUGFIX]`
 - Fix the issue where the spinner was not terminating correctly
 - Use the correct prompts to circumvent exceptions when executing on unsupported operating systems
+
+# 0.6.0-rc.0
+
+`[CHANGE]`
+
+`[FEATURE]`
+- Add logs subcommand
+
+`[ENHANCEMENT]`
+- Adjust the flags for "ofn install" and "ofn uninstall".
+- Enhance logs functionality to handle build stage log
+- Support running on mac
+
+`[BUGFIX]`
