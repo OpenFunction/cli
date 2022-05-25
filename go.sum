@@ -155,7 +155,7 @@ github.com/NYTimes/gziphandler v0.0.0-20170623195520-56545f4a5d46/go.mod h1:3wb0
 github.com/NYTimes/gziphandler v1.1.1/go.mod h1:n/CVRwUEOgIxrgPvAQhUUr9oeUtvrhMomdKFjzJNB0c=
 github.com/OneOfOne/xxhash v1.2.2/go.mod h1:HSdplMjZKSmBqAxg5vPj2TmRDmfkzw+cTzAElWljhcU=
 github.com/OneOfOne/xxhash v1.2.7/go.mod h1:eZbhyaAYD41SGSSsnmcpxVoRiQ/MPUTjUdIIOT9Um7Q=
-github.com/OpenFunction/OpenFunction v0.6.0 h1:BZZCgr4s6OFadPRhrO+vRKpo4BHznknZMMOHQc/I3hs=
+github.com/OpenFunction/OpenFunction v0.6.0 h1:VfIqhLBz3I9DBheWBjKuFHZ2L31NdDvf0ZcAkT+P+70=
 github.com/OpenFunction/OpenFunction v0.6.0/go.mod h1:7Ida4Kxst2Y+EnbIh/OELB22JXlJO81+PoXWJnB0sSw=
 github.com/ProtonMail/go-crypto v0.0.0-20210329181949-3900d675f39b/go.mod h1:HTM9X7e9oLwn7RiqLG0UVwVRJenLs3wN+tQ0NPAfwMQ=
 github.com/PuerkitoBio/purell v1.0.0/go.mod h1:c11w/QuzBsJSee3cPx9rAFu61PvFxuPbtSwDGJws/X0=
