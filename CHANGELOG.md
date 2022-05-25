@@ -50,3 +50,28 @@
 `[BUGFIX]`
 - Fix the issue where the spinner was not terminating correctly
 - Use the correct prompts to circumvent exceptions when executing on unsupported operating systems
+
+# 0.6.0-rc.0
+
+# What's Changed
+## ✨ New
+
+* enhance logs functionality to handle build stage log (#48) @jilichao
+* feat: add `logs` subcommand (#46) @loheagn
+* Adjust the flags for "ofn install" and "ofn uninstall". (#39) @tpiperatgod
+* Support running on mac (#37) @arugal
+
+## 🏗️ Maintenance
+
+* use main repo client (#41) @wentevill
+
+## 📝 Documentation
+
+* docs: adjust changelog, readme, release (#35) @tpiperatgod
+
+## Other changes
+
+* remove redundant https:// (#45) @jilichao
+  **Full Changelog**: https://github.com/OpenFunction/cli/compare/v0.5.3...v0.6.0-rc.0
+
+🎉 Thanks to all contributors @arugal, @benjaminhuo, @jilichao, @loheagn, @tpiperatgod and @wentevill
