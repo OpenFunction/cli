@@ -24,6 +24,7 @@ import (
 
 	"github.com/OpenFunction/cli/pkg/cmd/util"
 	cc "github.com/OpenFunction/cli/pkg/cmd/util/client"
+	openfunction "github.com/openfunction/apis/core/v1beta1"
 	client "github.com/openfunction/pkg/client/clientset/versioned"
 	swclient "github.com/shipwright-io/build/pkg/client/clientset/versioned"
 	"github.com/spf13/cobra"
@@ -121,48 +122,48 @@ func (l *Logs) run() error {
 	}
 
 	// Build stage
-	if f.Status.Build != nil {
+	if f.Status.Build != nil && f.Status.Build.State != openfunction.Skipped {
 		builderRef := f.Status.Build.ResourceRef
-
-		// get openfunction builder ref
-		builder, err := l.functionClient.CoreV1beta1().Builders(f.Namespace).Get(ctx, builderRef, metav1.GetOptions{})
-		if err != nil {
-			statusError, ok := err.(*k8serrors.StatusError)
-			// builder has been cleaned up
-			if !ok || statusError.Status().Code != 404 {
-				return err
-			}
-		}
-
-		// get shipwright builder-buildrun
-		swbuildrunRef := builder.Status.ResourceRef["shipwright.io/buildRun"]
-		if swbuildrunRef != "" {
-			swBuildRun, err := l.swClient.ShipwrightV1alpha1().BuildRuns(f.Namespace).Get(ctx, swbuildrunRef, metav1.GetOptions{})
+		if builderRef != "" {
+			// get openfunction builder ref
+			builder, err := l.functionClient.CoreV1beta1().Builders(f.Namespace).Get(ctx, builderRef, metav1.GetOptions{})
 			if err != nil {
 				statusError, ok := err.(*k8serrors.StatusError)
-				// buildrun has been cleaned up
+				// builder has been cleaned up
 				if !ok || statusError.Status().Code != 404 {
 					return err
 				}
 			}
-			err = l.logsForPods(ctx, metav1.ListOptions{LabelSelector: fmt.Sprintf("buildrun.shipwright.io/name=%s", swBuildRun.Name)})
-			if err != nil {
-				return err
+			// get shipwright builder-buildrun
+			swbuildrunRef := builder.Status.ResourceRef["shipwright.io/buildRun"]
+			if swbuildrunRef != "" {
+				swBuildRun, err := l.swClient.ShipwrightV1alpha1().BuildRuns(f.Namespace).Get(ctx, swbuildrunRef, metav1.GetOptions{})
+				if err != nil {
+					statusError, ok := err.(*k8serrors.StatusError)
+					// buildrun has been cleaned up
+					if !ok || statusError.Status().Code != 404 {
+						return err
+					}
+				}
+				err = l.logsForPods(ctx, metav1.ListOptions{LabelSelector: fmt.Sprintf("buildrun.shipwright.io/name=%s", swBuildRun.Name)})
+				if err != nil {
+					return err
+				}
 			}
 		}
-
 	}
 
 	// Serving stage
-	if f.Status.Serving != nil {
-		serving := f.Status.Serving.ResourceRef
-
-		if l.containerName == "" {
-			l.containerName = "function"
-		}
-		err := l.logsForPods(ctx, metav1.ListOptions{LabelSelector: fmt.Sprintf("openfunction.io/serving=%s", serving)})
-		if err != nil {
-			return err
+	if f.Status.Serving != nil && f.Status.Serving.State != openfunction.Skipped {
+		servingRef := f.Status.Serving.ResourceRef
+		if servingRef != "" {
+			if l.containerName == "" {
+				l.containerName = "function"
+			}
+			err := l.logsForPods(ctx, metav1.ListOptions{LabelSelector: fmt.Sprintf("openfunction.io/serving=%s", servingRef)})
+			if err != nil {
+				return err
+			}
 		}
 	}
 
@@ -183,7 +184,8 @@ func (l *Logs) logsForPods(ctx context.Context, listOpt metav1.ListOptions) erro
 		var logReader io.ReadCloser
 		if l.containerName != "" {
 			logReader, err = podInterface.GetLogs(pod.Name, &corev1.PodLogOptions{Follow: l.Follow, Container: l.containerName}).Stream(ctx)
-			if err != nil {
+			// the pod may be deleted due to scale, so we should exclude NotFound errors
+			if err != nil && !k8serrors.IsNotFound(err) {
 				return err
 			}
 			defer logReader.Close()
@@ -191,7 +193,8 @@ func (l *Logs) logsForPods(ctx context.Context, listOpt metav1.ListOptions) erro
 		} else {
 			for _, container := range pod.Spec.Containers {
 				logReader, err = podInterface.GetLogs(pod.Name, &corev1.PodLogOptions{Follow: l.Follow, Container: container.Name}).Stream(ctx)
-				if err != nil {
+				// the pod may be deleted due to scale, so we should exclude NotFound errors
+				if err != nil && !k8serrors.IsNotFound(err) {
 					return err
 				}
 
