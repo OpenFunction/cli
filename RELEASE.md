@@ -11,6 +11,7 @@ This page describes the release process and the currently planned schedule for u
 | v0.5.2         | 2022-01-03             | Laminar (GitHub: @tpiperatgod)   |
 | v0.5.3         | 2022-02-14             | Laminar (GitHub: @tpiperatgod)   |
 | v0.6.0-rc.0    | 2022-05-25             | Wrongerror (GitHub: @wrongerror) |
+| v0.6.0         | 2022-05-27             | Wrongerror (GitHub: @wrongerror) |
 
 # How to cut a new release
 
