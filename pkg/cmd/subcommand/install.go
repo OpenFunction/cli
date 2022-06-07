@@ -134,7 +134,7 @@ func (i *Install) ValidateArgs() error {
 	if i.OpenFunctionVersion == "" {
 		v, e := getLatestStableVersion()
 		if e != nil {
-			return e
+			return errors.Errorf("failed to fetch OpenFunction latest release, %s, use '--version' to specify the version of OpenFunction", e.Error())
 		}
 		i.OpenFunctionVersion = v
 	}
@@ -724,12 +724,22 @@ func getLatestStableVersion() (string, error) {
 
 	resp, err := http.Get(openFunctionLatestReleaseUrl)
 	if err != nil {
-		return "", errors.Wrap(err, "failed to fetch OpenFunction latest release")
+		return "", err
 	}
-	defer resp.Body.Close()
-	body, _ := ioutil.ReadAll(resp.Body)
 
-	json.Unmarshal(body, &jsonData)
+	if resp.StatusCode != http.StatusOK {
+		return "", errors.New(resp.Status)
+	}
+
+	defer resp.Body.Close()
+	body, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		return "", err
+	}
+
+	if err := json.Unmarshal(body, &jsonData); err != nil {
+		return "", err
+	}
 	res, err := jsonpath.JsonPathLookup(jsonData, "$.tag_name")
 	if err != nil {
 		return "", errors.Wrap(err, "failed to find the tag_name value in release information")
