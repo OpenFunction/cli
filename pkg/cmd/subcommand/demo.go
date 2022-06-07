@@ -72,7 +72,7 @@ func NewCmdDemo(cf *genericclioptions.ConfigFlags, ioStreams genericclioptions.I
 func (i *Demo) ValidateArgs(cmd *cobra.Command, args []string) error {
 	v, e := getLatestStableVersion()
 	if e != nil {
-		return e
+		return errors.Errorf("failed to fetch OpenFunction latest release, %s, use '--version' to specify the version of OpenFunction", e.Error())
 	}
 	i.OpenFunctionVersion = v
 	return nil
