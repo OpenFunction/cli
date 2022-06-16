@@ -110,7 +110,7 @@ func (i *Demo) RunKind(cf *genericclioptions.ConfigFlags, cmd *cobra.Command) er
 	grp1.AddSpinner()
 	go func(ctx context.Context, idx int) {
 		spinner := grp1.At(idx).WithName("Kind Cluster")
-		i.createCluster(ctx, spinner, operator)
+		i.createCluster(ctx, spinner, operator, cf)
 	}(ctx, 0)
 
 	grp1.Start(ctx)
@@ -230,12 +230,12 @@ func (i *Demo) RunKind(cf *genericclioptions.ConfigFlags, cmd *cobra.Command) er
 	return nil
 }
 
-func (i *Demo) createCluster(ctx context.Context, spinner *spinners.Spinner, operator *common.Operator) {
+func (i *Demo) createCluster(ctx context.Context, spinner *spinners.Spinner, operator *common.Operator, cf *genericclioptions.ConfigFlags) {
 	ctx, done := context.WithCancel(ctx)
 	defer done()
 
 	spinner.Update("Downloading Kind binary...")
-	if err := operator.DownloadKind(ctx); err != nil {
+	if err := operator.DownloadKind(ctx, cf); err != nil {
 		spinner.Error(errors.Wrap(err, "Failed to download Kind"))
 		return
 	}

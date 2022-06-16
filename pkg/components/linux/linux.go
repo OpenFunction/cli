@@ -14,6 +14,7 @@ import (
 	"github.com/OpenFunction/cli/pkg/components/inventory"
 	"github.com/pkg/errors"
 	"gopkg.in/yaml.v2"
+	"k8s.io/cli-runtime/pkg/genericclioptions"
 )
 
 type Executor struct {
@@ -199,18 +200,26 @@ func (e *Executor) GetInventoryRecord(ctx context.Context) (*inventory.Record, e
 	return record, nil
 }
 
-func (e *Executor) DownloadKind(ctx context.Context) error {
-	downloadCmd := "curl -Lo ./kind https://kind.sigs.k8s.io/dl/v0.11.1/kind-linux-amd64"
-	if _, _, err := e.Exec(downloadCmd); err != nil {
-		return err
-	}
-	chmodCmd := "chmod +x ./kind"
-	if _, _, err := e.Exec(chmodCmd); err != nil {
-		return err
-	}
-	mvCmd := "mv ./kind /usr/local/bin/kind"
-	if _, _, err := e.Exec(mvCmd); err != nil {
-		return err
+func (e *Executor) DownloadKind(ctx context.Context, cf *genericclioptions.ConfigFlags) error {
+	// The download operation will be executed if `kind` is not in the $PATH
+	if _, _, err := e.Exec("kind"); err != nil && strings.Contains(err.Error(), "not found") {
+		downloadFlags := []string{"-Lo"}
+		if cf.Insecure != nil && *cf.Insecure {
+			downloadFlags = append(downloadFlags, "-k")
+		}
+		downloadCmd := fmt.Sprintf("curl %s ./kind https://kind.sigs.k8s.io/dl/v0.11.1/kind-linux-amd64", strings.Join(downloadFlags[:], " "))
+		if _, _, err := e.Exec(downloadCmd); err != nil {
+			return err
+		}
+		chmodCmd := "chmod +x ./kind"
+		if _, _, err := e.Exec(chmodCmd); err != nil {
+			return err
+		}
+		mvCmd := "mv ./kind /usr/local/bin/kind"
+		if _, _, err := e.Exec(mvCmd); err != nil {
+			return err
+		}
+		return nil
 	}
 	return nil
 }

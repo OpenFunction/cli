@@ -18,6 +18,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/version"
+	"k8s.io/cli-runtime/pkg/genericclioptions"
 	k8s "k8s.io/client-go/kubernetes"
 )
 
@@ -333,8 +334,8 @@ func (o *Operator) Uninstall(
 	return nil
 }
 
-func (o *Operator) DownloadKind(ctx context.Context) error {
-	return o.executor.DownloadKind(ctx)
+func (o *Operator) DownloadKind(ctx context.Context, cf *genericclioptions.ConfigFlags) error {
+	return o.executor.DownloadKind(ctx, cf)
 }
 
 func (o *Operator) CreateKindCluster(ctx context.Context) error {
